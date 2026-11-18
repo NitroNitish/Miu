@@ -92,3 +92,64 @@ export const generateInvitationSecret = async (): Promise<{
     tokenHash,
   };
 };
+
+/**
+ * Safely extracts an invitation token or short code from a full URL, path, or raw input string
+ */
+export const extractInvitationSecret = (raw: string): string => {
+  if (!raw) return '';
+  let str = raw.trim();
+
+  // If input contains URL patterns or query parameters
+  if (str.includes('/') || str.includes('?') || str.includes('=')) {
+    try {
+      const parsed = str.startsWith('http') ? new URL(str) : new URL(str, 'https://miu.local');
+      const param =
+        parsed.searchParams.get('token') ||
+        parsed.searchParams.get('code') ||
+        parsed.searchParams.get('join');
+      if (param) {
+        str = param.trim();
+      } else {
+        const segments = parsed.pathname.split('/').filter(Boolean);
+        if (segments.length > 0) {
+          const last = segments[segments.length - 1];
+          if (last !== 'join' && last !== 'invite') {
+            str = last.trim();
+          }
+        }
+      }
+    } catch {
+      // ignore parse errors and proceed to fallback
+    }
+  }
+
+  // Strip query strings or trailing slashes
+  str = str.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  const lastPart = str.split('/').pop() || str;
+  return lastPart.trim();
+};
+
+/**
+ * Resolves the raw token or short code to the expected lookup string for Supabase RPCs:
+ * - 48-char raw token -> computes 64-char SHA-256 hash
+ * - 64-char SHA-256 hash -> lowercased hash
+ * - Short code (e.g. 6 chars) -> uppercased short code
+ */
+export const resolveLookupSecret = async (rawSecret: string): Promise<string> => {
+  const secret = extractInvitationSecret(rawSecret);
+  if (!secret) return '';
+
+  // If already a 64-character SHA-256 hex string, pass as-is
+  if (secret.length === 64 && /^[0-9a-fA-F]{64}$/.test(secret)) {
+    return secret.toLowerCase();
+  }
+
+  // If raw token (> 20 chars), hash it
+  if (secret.length > 20) {
+    return await hashToken(secret);
+  }
+
+  // Otherwise it's a short code
+  return secret.toUpperCase();
+};

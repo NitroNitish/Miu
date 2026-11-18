@@ -16,6 +16,14 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   const { isDark, setThemeMode } = useTheme();
 
   useEffect(() => {
+    // Check if URL has invite parameters (e.g. from redirect or query string)
+    const params = new URLSearchParams(window.location.search);
+    const inviteParam = params.get('join') || params.get('token') || params.get('code');
+    if (inviteParam) {
+      navigate(`/join/${encodeURIComponent(inviteParam)}`, { replace: true });
+      return;
+    }
+
     if (!autoRedirect) return;
     const timer = setTimeout(() => {
       if (onFinish) {

@@ -6,6 +6,8 @@ import {
   usernameToSyntheticEmail,
   hashToken,
   generateInvitationSecret,
+  extractInvitationSecret,
+  resolveLookupSecret,
 } from '../lib/supabase';
 import { Profile, Connection, PartnerProfile } from '../types';
 import { initialPartnerProfile, initialUserProfile } from '../data/mockData';
@@ -216,6 +218,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
   }, [fetchConnection]);
+
+  // Keep connection in sync on window focus and via realtime channel
+  useEffect(() => {
+    if (!user?.id || !isSupabaseConfigured) return;
+
+    const onFocus = () => {
+      fetchConnection(user.id);
+    };
+    window.addEventListener('focus', onFocus);
+
+    const channel = supabase
+      .channel(`user_connections_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'connections',
+        },
+        () => {
+          fetchConnection(user.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchConnection]);
 
   // LOGIN (Username + Password)
   const login = async (
@@ -458,8 +490,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // VALIDATE INVITATION
   const validateInvitation = async (tokenOrCode: string) => {
-    const clean = tokenOrCode.trim();
-    if (!clean) return { valid: false, error: 'No invitation link or code provided.' };
+    const rawSecret = extractInvitationSecret(tokenOrCode);
+    if (!rawSecret) return { valid: false, error: 'No invitation link or code provided.' };
 
     if (!isSupabaseConfigured) {
       return {
@@ -471,8 +503,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // If it looks like a full 48-char hex token, hash it. If it's a short code (e.g. 6 chars), pass as-is.
-      const lookupSecret = clean.length > 20 ? await hashToken(clean) : clean;
+      const lookupSecret = await resolveLookupSecret(rawSecret);
       const { data, error } = await supabase.rpc('validate_invitation', {
         p_token_hash: lookupSecret,
       });
@@ -533,8 +564,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const clean = tokenOrCode.trim();
-      const lookupSecret = clean.length > 20 ? await hashToken(clean) : clean;
+      const lookupSecret = await resolveLookupSecret(tokenOrCode);
       const { data, error } = await supabase.rpc('accept_invitation', {
         p_token_hash: lookupSecret,
       });

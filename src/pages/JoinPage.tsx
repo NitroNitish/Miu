@@ -1,22 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Shield, Sparkles, AlertCircle, ArrowRight, Sun, Moon, KeyRound } from 'lucide-react';
+import { Shield, Sparkles, AlertCircle, ArrowRight, Sun, Moon, KeyRound, Copy, LogOut } from 'lucide-react';
+import { extractInvitationSecret } from '../lib/supabase';
 
 export const JoinPage: React.FC = () => {
   const { token: urlToken } = useParams<{ token?: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, validateInvitation, acceptInvitation, register } = useAuth();
+  const { user, connection, validateInvitation, acceptInvitation, register, logout } = useAuth();
   const { isDark, setThemeMode } = useTheme();
 
-  const [activeToken, setActiveToken] = useState<string>(urlToken || '');
+  const queryToken = searchParams.get('token') || searchParams.get('code') || searchParams.get('join') || '';
+  const rawParam = urlToken || queryToken || '';
+
+  const [activeToken, setActiveToken] = useState<string>(extractInvitationSecret(rawParam));
   const [inputCode, setInputCode] = useState<string>('');
-  const [isValidating, setIsValidating] = useState<boolean>(Boolean(urlToken));
+  const [isValidating, setIsValidating] = useState<boolean>(Boolean(rawParam));
   const [isValid, setIsValid] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviterName, setInviterName] = useState<string>('Your partner');
   const [inviterUsername, setInviterUsername] = useState<string>('');
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Registration state if user doesn't have an account
   const [username, setUsername] = useState('');
@@ -27,7 +33,7 @@ export const JoinPage: React.FC = () => {
 
   // Validate token or code
   const runValidation = async (secret: string) => {
-    const clean = secret.trim();
+    const clean = extractInvitationSecret(secret);
     if (!clean) return;
 
     setIsValidating(true);
@@ -49,17 +55,29 @@ export const JoinPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (urlToken) {
-      runValidation(urlToken);
+    const clean = extractInvitationSecret(rawParam);
+    if (clean) {
+      runValidation(clean);
     } else {
       setIsValidating(false);
     }
-  }, [urlToken]);
+  }, [rawParam]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const extracted = extractInvitationSecret(raw);
+    if (extracted.length <= 8) {
+      setInputCode(extracted.toUpperCase());
+    } else {
+      setInputCode(extracted);
+    }
+  };
 
   const handleManualCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputCode.trim()) return;
-    await runValidation(inputCode.trim());
+    const clean = extractInvitationSecret(inputCode);
+    if (!clean) return;
+    await runValidation(clean);
   };
 
   const handleAcceptLoggedIn = async () => {
@@ -113,6 +131,21 @@ export const JoinPage: React.FC = () => {
     }
   };
 
+  const isCreatorOfInvitation = Boolean(
+    user &&
+    inviterUsername &&
+    user.username.toLowerCase() === inviterUsername.toLowerCase()
+  );
+
+  const hasActiveConnection = Boolean(connection && connection.status === 'accepted');
+
+  const handleCopyInviteLink = () => {
+    const url = window.location.href;
+    navigator.clipboard?.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
   return (
     <div className="miu min-h-screen flex items-center justify-center bg-[#F7F4EF] dark:bg-[#111214] text-[#1C1B1F] dark:text-[#F5F5F5] p-4 transition-colors select-none">
       <div className="w-full max-w-[420px] bg-white dark:bg-[#191A1D] border border-[#EAE5DE] dark:border-[#303136] rounded-[24px] p-6 sm:p-8 shadow-xl flex flex-col relative overflow-hidden animate-fade-in">
@@ -161,9 +194,9 @@ export const JoinPage: React.FC = () => {
             <form onSubmit={handleManualCodeSubmit} className="w-full space-y-3 pt-2">
               <input
                 type="text"
-                placeholder="Invitation Code (e.g. 7K9XY2)"
+                placeholder="Code or Link (e.g. 7K9XY2)"
                 value={inputCode}
-                onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                onChange={handleInputChange}
                 className="w-full h-11 px-3.5 rounded-xl bg-[#FAF9F7] dark:bg-[#232428] border border-[#EAE5DE] dark:border-[#303136] text-sm text-center font-mono tracking-widest text-[#1C1B1F] dark:text-[#F5F5F5] outline-none focus:border-[#A99BCB]"
                 required
               />
@@ -196,9 +229,12 @@ export const JoinPage: React.FC = () => {
                 A private, encrypted space for two.
               </p>
 
-              <div className="mt-2 px-3 py-1.5 rounded-full bg-[#F3F2F0] dark:bg-[#232428] border border-[#EEEEEC] dark:border-[#303136] text-xs font-medium text-[#171717] dark:text-[#F5F5F5] flex items-center gap-1.5">
+              <div className="mt-2 px-3.5 py-1.5 rounded-full bg-[#F3F2F0] dark:bg-[#232428] border border-[#EEEEEC] dark:border-[#303136] text-xs font-medium text-[#171717] dark:text-[#F5F5F5] flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#35B779]" />
-                <span>Invited by <strong className="font-semibold">{inviterName}</strong> {inviterUsername && `(@${inviterUsername})`}</span>
+                <span>
+                  Invited by <strong className="font-semibold">{inviterName}</strong>{' '}
+                  {inviterUsername && `(@${inviterUsername})`}
+                </span>
               </div>
             </div>
 
@@ -209,16 +245,68 @@ export const JoinPage: React.FC = () => {
               </div>
             )}
 
-            {user ? (
-              /* Already logged in: simple Accept button */
+            {isCreatorOfInvitation ? (
+              /* Case A: User is the creator testing their own link in the same browser */
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-center space-y-3">
+                <div className="w-9 h-9 mx-auto rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                    You created this invitation link
+                  </p>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-1 leading-relaxed">
+                    This link is for your partner. Open this page in an Incognito / private browsing window or share it directly with them.
+                  </p>
+                </div>
+                <div className="pt-1 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyInviteLink}
+                    className="w-full h-10 rounded-xl bg-amber-600 text-white text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{copiedLink ? 'Link Copied!' : 'Copy Link for Partner'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await logout();
+                    }}
+                    className="w-full h-10 rounded-xl border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Log Out to Join as Partner</span>
+                  </button>
+                </div>
+              </div>
+            ) : hasActiveConnection ? (
+              /* Case B: User already has an active connection */
+              <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-center space-y-2">
+                <p className="text-xs font-semibold text-blue-800 dark:text-blue-200">
+                  Already Connected
+                </p>
+                <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80 leading-relaxed">
+                  You already have an active private connection on Miu. Miu is designed exclusively for two.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/chat')}
+                  className="mt-2 w-full h-11 rounded-xl bg-[#1E1F24] dark:bg-[#B6A4DC] text-white dark:text-[#111214] text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                >
+                  Return to Chat
+                </button>
+              </div>
+            ) : user ? (
+              /* Case C: Already logged in as partner: simple Accept button */
               <div className="space-y-3 pt-2">
                 <p className="text-xs text-center text-[#8C867E] dark:text-[#999999]">
-                  Logged in as <strong className="text-white">@{user.username}</strong>
+                  Logged in as <strong className="text-neutral-900 dark:text-white">@{user.username}</strong>
                 </p>
                 <button
                   onClick={handleAcceptLoggedIn}
                   disabled={isSubmitting}
-                  className="w-full h-12 rounded-xl bg-[#1E1F24] dark:bg-[#B6A4DC] text-white dark:text-[#111214] font-semibold text-sm hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full h-12 rounded-xl bg-[#1E1F24] dark:bg-[#B6A4DC] text-white dark:text-[#111214] font-semibold text-sm hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
                 >
                   {isSubmitting ? (
                     'Connecting...'
@@ -231,7 +319,7 @@ export const JoinPage: React.FC = () => {
                 </button>
               </div>
             ) : (
-              /* Not logged in: Quick username + password form */
+              /* Case D: Not logged in: Quick username + password form */
               <form onSubmit={handleRegisterAndAccept} className="space-y-3.5 pt-2">
                 <div>
                   <label className="block text-xs font-semibold text-[#8C867E] dark:text-[#999999] uppercase tracking-wider mb-1">

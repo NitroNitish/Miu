@@ -156,7 +156,7 @@ DECLARE
   v_secret TEXT := trim(p_token_hash);
 BEGIN
   IF v_recipient_id IS NULL THEN
-    RAISE EXCEPTION 'You must be logged in to accept an invitation.';
+    RETURN jsonb_build_object('success', false, 'error', 'You must be logged in to accept an invitation.');
   END IF;
 
   -- Ensure recipient profile exists
@@ -180,15 +180,15 @@ BEGIN
   FOR UPDATE;
 
   IF v_invite IS NULL THEN
-    RAISE EXCEPTION 'Invitation not found.';
+    RETURN jsonb_build_object('success', false, 'error', 'Invitation not found. Please check your link or code.');
   END IF;
 
   IF v_invite.creator_id = v_recipient_id THEN
-    RAISE EXCEPTION 'You cannot accept your own invitation.';
+    RETURN jsonb_build_object('success', false, 'error', 'You cannot accept your own invitation.');
   END IF;
 
   IF v_invite.status <> 'pending' OR v_invite.expires_at < now() THEN
-    RAISE EXCEPTION 'Invitation is no longer valid or has expired.';
+    RETURN jsonb_build_object('success', false, 'error', 'Invitation is no longer valid or has expired.');
   END IF;
 
   -- Ensure recipient is not already in an active connection
@@ -199,7 +199,7 @@ BEGIN
   LIMIT 1;
 
   IF v_existing_active IS NOT NULL THEN
-    RAISE EXCEPTION 'You already have an active connection with another user.';
+    RETURN jsonb_build_object('success', false, 'error', 'You already have an active connection with another user.');
   END IF;
 
   -- Ensure creator is still free
@@ -210,7 +210,7 @@ BEGIN
   LIMIT 1;
 
   IF v_existing_active IS NOT NULL THEN
-    RAISE EXCEPTION 'The inviter is already connected with someone else.';
+    RETURN jsonb_build_object('success', false, 'error', 'The inviter is already connected with someone else.');
   END IF;
 
   -- Ensure creator profile exists
