@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Message, PartnerProfile, UserProfile, MemoryItem, DailyQuestion } from '../types';
 import { initialMessages, initialPartnerProfile, initialUserProfile, initialMemories, initialDailyQuestions } from '../data/mockData';
+import { useAuth } from './AuthContext';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 interface ChatContextType {
   messages: Message[];
@@ -38,18 +41,24 @@ interface ChatContextType {
   triggerPartnerResponse: (triggerText?: string) => void;
   activeViewOnceMedia: { messageId: string; url: string } | null;
   setActiveViewOnceMedia: (media: { messageId: string; url: string } | null) => void;
+  broadcastTyping: (isTyping: boolean) => void;
+  uploadMediaFile: (file: File | Blob, bucket?: 'chat-media' | 'voice-messages' | 'memories') => Promise<string | null>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user: authUser, connection, partner: authPartner } = useAuth();
+
+  // Dual Retention Rule: If user is second participant (user_two_id), do not persist chat in localStorage
+  const isSecondParticipant = connection && authUser && connection.user_two_id === authUser.id;
+
   const [messages, setMessages] = useState<Message[]>(() => {
+    if (isSecondParticipant) return [];
     const saved = localStorage.getItem('miu_messages');
     return saved ? JSON.parse(saved) : initialMessages;
   });
 
-  const [partner] = useState<PartnerProfile>(initialPartnerProfile);
-  const [user] = useState<UserProfile>(initialUserProfile);
   const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
 
@@ -70,10 +79,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [activeViewOnceMedia, setActiveViewOnceMedia] = useState<{ messageId: string; url: string } | null>(null);
 
-  // Sync to localStorage
+  const presenceChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Synchronize localStorage according to Phase 10 Retention Rules
   useEffect(() => {
-    localStorage.setItem('miu_messages', JSON.stringify(messages));
-  }, [messages]);
+    if (!isSecondParticipant) {
+      localStorage.setItem('miu_messages', JSON.stringify(messages));
+    } else {
+      localStorage.removeItem('miu_messages');
+    }
+  }, [messages, isSecondParticipant]);
 
   useEffect(() => {
     localStorage.setItem('miu_memories', JSON.stringify(memories));
@@ -88,14 +104,175 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
-  const sendMessage = ({
+  // Convert Database Message to UI Message model
+  const dbMessageToUI = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (m: any): Message => {
+      const isSender = authUser ? m.sender_id === authUser.id : m.sender_id === 'user';
+      const createdDate = new Date(m.created_at || Date.now());
+      const timeStr = createdDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+      return {
+        id: m.id,
+        sender: isSender ? 'user' : 'partner',
+        type: m.message_type || 'text',
+        content: m.content || '',
+        mediaUrl: m.media_path,
+        duration: m.duration,
+        timestamp: timeStr,
+        date: 'Today',
+        status: m.seen_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent',
+        replyTo: m.reply_to_id
+          ? {
+              id: m.reply_to_id,
+              sender: isSender ? 'partner' : 'user',
+              text: 'Original message',
+            }
+          : undefined,
+        reactions: m.reactions || {},
+        isViewOnce: m.is_view_once,
+        isViewed: m.is_viewed,
+        isDeletedForEveryone: m.deleted_for_everyone,
+        isEdited: !!m.edited_at,
+      };
+    },
+    [authUser]
+  );
+
+  // Load Realtime Messages and Presence from Supabase
+  useEffect(() => {
+    if (!isSupabaseConfigured || !connection?.conversation_id || !authUser) return;
+
+    const conversationId = connection.conversation_id;
+
+    // 1. Fetch initial message history
+    const loadConversation = async () => {
+      try {
+        const { data: dbMessages, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true });
+
+        if (!error && dbMessages) {
+          const uiMsgs = dbMessages.map(dbMessageToUI);
+          setMessages(uiMsgs);
+        }
+      } catch (err) {
+        console.error('Error loading messages from Supabase:', err);
+      }
+    };
+
+    loadConversation();
+
+    // 2. Setup Postgres Changes Realtime Subscription
+    const messageChannel = supabase
+      .channel(`chat_messages_${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const incoming = dbMessageToUI(payload.new);
+            setMessages((prev) => {
+              if (prev.some((x) => x.id === incoming.id)) return prev;
+              return [...prev, incoming];
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = dbMessageToUI(payload.new);
+            setMessages((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+          } else if (payload.eventType === 'DELETE') {
+            setMessages((prev) => prev.filter((x) => x.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // 3. Setup Broadcast & Presence Channel (Typing, Online status)
+    const presenceChannel = supabase.channel(`chat_presence_${conversationId}`, {
+      config: { presence: { key: authUser.id } },
+    });
+    presenceChannelRef.current = presenceChannel;
+
+    presenceChannel
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        if (payload.payload?.userId !== authUser.id) {
+          setIsPartnerTyping(Boolean(payload.payload?.isTyping));
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          if (payload.payload?.isTyping) {
+            typingTimeoutRef.current = setTimeout(() => {
+              setIsPartnerTyping(false);
+            }, 3000);
+          }
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            online_at: new Date().toISOString(),
+            user_id: authUser.id,
+            username: authUser.username,
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(messageChannel);
+      if (presenceChannelRef.current) {
+        supabase.removeChannel(presenceChannelRef.current);
+        presenceChannelRef.current = null;
+      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [connection?.conversation_id, authUser, dbMessageToUI]);
+
+  // Broadcast typing status
+  const broadcastTyping = (isTyping: boolean) => {
+    if (!presenceChannelRef.current || !authUser) return;
+    presenceChannelRef.current.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { userId: authUser.id, isTyping },
+    });
+  };
+
+  // Upload media to Supabase Storage
+  const uploadMediaFile = async (
+    file: File | Blob,
+    bucket: 'chat-media' | 'voice-messages' | 'memories' = 'chat-media'
+  ): Promise<string | null> => {
+    if (!isSupabaseConfigured || !authUser) return null;
+
+    try {
+      const ext = file.type.split('/')[1]?.split(';')[0] || 'jpg';
+      const path = `${authUser.id}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file);
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        return null;
+      }
+
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
+    } catch (err) {
+      console.error('File upload error:', err);
+      return null;
+    }
+  };
+
+  // SEND MESSAGE
+  const sendMessage = async ({
     content,
     type = 'text',
     mediaUrl,
     isViewOnce = false,
     replyTo,
-    interactionType,
-    interactionData,
     duration,
   }: {
     content: string;
@@ -107,8 +284,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     interactionData?: Message['interactionData'];
     duration?: number;
   }) => {
+    const tempId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const newMsg: Message = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: tempId,
       sender: 'user',
       type,
       content,
@@ -118,69 +296,83 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isViewed: false,
       timestamp: getCurrentTime(),
       date: 'Today',
-      status: 'sent',
+      status: 'sending',
       replyTo,
-      interactionType,
-      interactionData,
     };
 
+    // 1. Optimistic UI insertion
     setMessages((prev) => [...prev, newMsg]);
 
-    // Simulate status update: sent -> delivered -> seen
+    // 2. Persist to Supabase if configured and connected
+    if (isSupabaseConfigured && connection?.conversation_id && authUser) {
+      try {
+        const { data: inserted, error } = await supabase
+          .from('messages')
+          .insert([
+            {
+              conversation_id: connection.conversation_id,
+              sender_id: authUser.id,
+              message_type: type,
+              content,
+              media_path: mediaUrl,
+              duration,
+              is_view_once: isViewOnce,
+              reply_to_id: replyTo?.id,
+            },
+          ])
+          .select()
+          .single();
+
+        if (!error && inserted) {
+          // Replace tempId with actual server message
+          setMessages((prev) =>
+            prev.map((m) => (m.id === tempId ? { ...dbMessageToUI(inserted), status: 'sent' } : m))
+          );
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to insert message to Supabase:', err);
+      }
+    }
+
+    // Local / Offline fallback simulation
     setTimeout(() => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === newMsg.id ? { ...m, status: 'delivered' } : m))
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'delivered' } : m))
       );
-    }, 800);
+    }, 600);
 
     setTimeout(() => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === newMsg.id ? { ...m, status: 'seen' } : m))
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'seen' } : m))
       );
-    }, 1800);
+    }, 1400);
+  };
 
-    // If it's a regular user text, simulate a natural reply after 3s
-    if (type === 'text' || type === 'doodle' || type === 'interaction') {
-      triggerPartnerResponse();
+  // EDIT MESSAGE
+  const editMessage = async (id: string, newContent: string) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === id ? { ...msg, content: newContent, isEdited: true } : msg
+      )
+    );
+
+    if (isSupabaseConfigured && authUser) {
+      await supabase
+        .from('messages')
+        .update({ content: newContent, edited_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('sender_id', authUser.id);
     }
   };
 
-  const triggerPartnerResponse = (customText?: string) => {
-    setTimeout(() => {
-      setIsPartnerTyping(true);
-    }, 2200);
-
-    setTimeout(() => {
-      setIsPartnerTyping(false);
-      const responses = [
-        "I love this. Let me save that thought.",
-        "Spot on. You always know what fits best.",
-        "Looking forward to this afternoon!",
-        "Saved to our private notes. ✨",
-        "Could not agree more.",
-        "Just smiled reading this :)",
-      ];
-      const replyText = customText || responses[Math.floor(Math.random() * responses.length)];
-
-      const partnerMsg: Message = {
-        id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        sender: 'partner',
-        type: 'text',
-        content: replyText,
-        timestamp: getCurrentTime(),
-        date: 'Today',
-        status: 'seen',
-      };
-
-      setMessages((prev) => [...prev, partnerMsg]);
-    }, 4500);
+  // DELETE FOR ME
+  const deleteMessage = async (id: string) => {
+    setMessages((prev) => prev.filter((msg) => msg.id !== id));
   };
 
-  const deleteMessage = (id: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-  };
-
-  const deleteForEveryone = (id: string) => {
+  // DELETE FOR EVERYONE
+  const deleteForEveryone = async (id: string) => {
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === id
@@ -189,49 +381,66 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               isDeletedForEveryone: true,
               content: 'This message was deleted',
               mediaUrl: undefined,
-              reactions: undefined,
             }
           : msg
       )
     );
+
+    if (isSupabaseConfigured && authUser) {
+      await supabase
+        .from('messages')
+        .update({
+          deleted_for_everyone: true,
+          deleted_at: new Date().toISOString(),
+          content: 'This message was deleted',
+          media_path: null,
+        })
+        .eq('id', id)
+        .eq('sender_id', authUser.id);
+    }
   };
 
-  const editMessage = (id: string, newContent: string) => {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === id
-          ? {
-              ...msg,
-              content: newContent,
-              isEdited: true,
-            }
-          : msg
-      )
-    );
-  };
+  // ADD REACTION
+  const addReaction = async (messageId: string, emoji: string) => {
+    let updatedReactions: { [key: string]: number } = {};
 
-  const addReaction = (messageId: string, emoji: string) => {
     setMessages((prev) =>
       prev.map((msg) => {
-        if (msg.id !== messageId) return msg;
-        const currentReactions = { ...(msg.reactions || {}) };
-        if (currentReactions[emoji]) {
-          delete currentReactions[emoji];
-        } else {
-          currentReactions[emoji] = 1;
+        if (msg.id === messageId) {
+          const current = { ...(msg.reactions || {}) };
+          if (current[emoji]) {
+            current[emoji] += 1;
+          } else {
+            current[emoji] = 1;
+          }
+          updatedReactions = current;
+          return { ...msg, reactions: current };
         }
-        return {
-          ...msg,
-          reactions: currentReactions,
-        };
+        return msg;
       })
     );
+
+    if (isSupabaseConfigured) {
+      await supabase
+        .from('messages')
+        .update({ reactions: updatedReactions })
+        .eq('id', messageId);
+    }
   };
 
-  const markViewOnceAsViewed = (messageId: string) => {
+  // VIEW ONCE ATOMIC CONSUMPTION
+  const markViewOnceAsViewed = async (messageId: string) => {
     setMessages((prev) =>
       prev.map((msg) => (msg.id === messageId ? { ...msg, isViewed: true } : msg))
     );
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.rpc('open_view_once_media', { p_message_id: messageId });
+      } catch (err) {
+        console.error('Error opening view-once media:', err);
+      }
+    }
   };
 
   const markAllAsRead = () => {
@@ -240,9 +449,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearChat = () => {
     setMessages([]);
+    localStorage.removeItem('miu_messages');
   };
 
-  const answerDailyQuestion = (id: string, answer: string) => {
+  // DAILY QUESTION
+  const answerDailyQuestion = async (id: string, answer: string) => {
     setDailyQuestions((prev) =>
       prev.map((q) => {
         if (q.id === id) {
@@ -257,13 +468,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
     );
 
-    // Also send an automated card notification to chat
+    if (isSupabaseConfigured && authUser) {
+      await supabase.from('daily_answers').insert([
+        {
+          question_id: id,
+          user_id: authUser.id,
+          answer,
+        },
+      ]);
+    }
+
     sendMessage({
       content: `Answered today's question: "${answer}"`,
       type: 'text',
     });
   };
 
+  // DOODLES
   const saveDoodleToMemories = (dataUrl: string, caption = 'Shared canvas sketch') => {
     const newMemory: MemoryItem = {
       id: `mem-${Date.now()}`,
@@ -275,6 +496,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isStarred: true,
     };
     setMemories((prev) => [newMemory, ...prev]);
+
+    if (isSupabaseConfigured && connection && authUser) {
+      supabase.from('memories').insert([
+        {
+          connection_id: connection.id,
+          uploaded_by: authUser.id,
+          media_path: dataUrl,
+          media_type: 'doodle',
+          caption,
+          is_starred: true,
+        },
+      ]);
+    }
   };
 
   const sendDoodleToChat = (dataUrl: string) => {
@@ -286,7 +520,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const sendQuickInteraction = (type: 'nudge' | 'pulse' | 'music' | 'weather', data?: Record<string, string>) => {
+  const sendQuickInteraction = (
+    type: 'nudge' | 'pulse' | 'music' | 'weather',
+    data?: Record<string, string>
+  ) => {
     let content = 'Sent an interaction';
     if (type === 'pulse') content = 'Sent a gentle pulse heartbeat ❤️';
     if (type === 'nudge') content = 'Sent a gentle tap: Thinking of you.';
@@ -315,12 +552,39 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCallState({ isInCall: false, type: null });
   };
 
+  const triggerPartnerResponse = (triggerText?: string) => {
+    setIsPartnerTyping(true);
+    setTimeout(() => {
+      setIsPartnerTyping(false);
+      const reply = triggerText ? `Got your note: "${triggerText}".` : 'I am here with you.';
+      const newMsg: Message = {
+        id: `msg-${Date.now()}`,
+        sender: 'partner',
+        type: 'text',
+        content: reply,
+        timestamp: getCurrentTime(),
+        date: 'Today',
+        status: 'seen',
+      };
+      setMessages((prev) => [...prev, newMsg]);
+    }, 1500);
+  };
+
+  // Compute active user profile for UI
+  const activeUserProfile: UserProfile = {
+    name: authUser?.display_name || initialUserProfile.name,
+    handle: authUser?.username ? `@${authUser.username}` : initialUserProfile.handle,
+    avatar: authUser?.avatar_url || initialUserProfile.avatar,
+    bio: authUser?.bio || initialUserProfile.bio,
+    phone: '',
+  };
+
   return (
     <ChatContext.Provider
       value={{
         messages,
-        partner,
-        user,
+        partner: authPartner || initialPartnerProfile,
+        user: activeUserProfile,
         isPartnerTyping,
         memories,
         dailyQuestions,
@@ -344,6 +608,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         triggerPartnerResponse,
         activeViewOnceMedia,
         setActiveViewOnceMedia,
+        broadcastTyping,
+        uploadMediaFile,
       }}
     >
       {children}

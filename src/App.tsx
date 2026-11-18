@@ -1,12 +1,14 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
 import { BottomNavigation } from './components/navigation/BottomNavigation';
 import { Sidebar } from './components/navigation/Sidebar';
 
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
+import { JoinPage } from './pages/JoinPage';
 import { ChatsPage } from './pages/ChatsPage';
 import { ChatPage } from './pages/ChatPage';
 import { TogetherPage } from './pages/TogetherPage';
@@ -22,7 +24,9 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     location.pathname === '/' ||
     location.pathname === '/splash' ||
     location.pathname === '/login' ||
-    location.pathname === '/auth';
+    location.pathname === '/auth' ||
+    location.pathname.startsWith('/join') ||
+    location.pathname.startsWith('/invite');
 
   // Certain screens like active Chat and Doodle have their own immersive bottom composer/toolbar on mobile
   const hideBottomNavOnMobile =
@@ -57,31 +61,35 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 export function App() {
   return (
     <ThemeProvider>
-      <ChatProvider>
-        <BrowserRouter>
-          <AppLayout>
-            <Routes>
-              {/* Opening Splash Screen on root */}
-              <Route path="/" element={<SplashScreen />} />
-              <Route path="/splash" element={<SplashScreen />} />
-              <Route path="/login" element={<AuthPage />} />
-              <Route path="/auth" element={<Navigate to="/login" replace />} />
+      <AuthProvider>
+        <ChatProvider>
+          <BrowserRouter>
+            <AppLayout>
+              <Routes>
+                {/* Opening Splash Screen on root */}
+                <Route path="/" element={<SplashScreen />} />
+                <Route path="/splash" element={<SplashScreen />} />
+                <Route path="/login" element={<AuthPage />} />
+                <Route path="/auth" element={<Navigate to="/login" replace />} />
+                <Route path="/join/:token" element={<JoinPage />} />
+                <Route path="/invite/:token" element={<JoinPage />} />
 
-              {/* Main Application Screens */}
-              <Route path="/chat" element={<ChatPage />} />
-              <Route path="/chats" element={<ChatsPage />} />
-              <Route path="/together" element={<TogetherPage />} />
-              <Route path="/doodle" element={<DoodlePage />} />
-              <Route path="/daily-question" element={<DailyQuestionPage />} />
-              <Route path="/memories" element={<MemoriesPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
+                {/* Main Application Screens */}
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="/chats" element={<ChatsPage />} />
+                <Route path="/together" element={<TogetherPage />} />
+                <Route path="/doodle" element={<DoodlePage />} />
+                <Route path="/daily-question" element={<DailyQuestionPage />} />
+                <Route path="/memories" element={<MemoriesPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/chat" replace />} />
-            </Routes>
-          </AppLayout>
-        </BrowserRouter>
-      </ChatProvider>
+                {/* Fallback */}
+                <Route path="*" element={<Navigate to="/chat" replace />} />
+              </Routes>
+            </AppLayout>
+          </BrowserRouter>
+        </ChatProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

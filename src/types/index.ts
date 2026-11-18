@@ -1,6 +1,6 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-export type MessageStatus = 'sent' | 'delivered' | 'seen';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen';
 
 export type MessageType = 'text' | 'image' | 'video' | 'voice' | 'doodle' | 'view_once' | 'interaction';
 
@@ -76,4 +76,36 @@ export interface DailyQuestion {
   partnerAnswer?: string;
   answeredAt?: string;
   isRevealed: boolean;
+}
+
+export interface Profile {
+  id: string;
+  username: string;
+  normalized_username: string;
+  display_name: string;
+  avatar_url?: string;
+  bio?: string;
+  created_at?: string;
+  updated_at?: string;
+  last_active_at?: string;
+}
+
+export interface Connection {
+  id: string;
+  user_one_id: string;
+  user_two_id: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'disconnected';
+  created_at: string;
+  connected_at?: string;
+  conversation_id?: string;
+  partner?: Profile;
+}
+
+export interface Invitation {
+  id: string;
+  creator_id: string;
+  short_code: string;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  expires_at: string;
+  creator?: Profile;
 }

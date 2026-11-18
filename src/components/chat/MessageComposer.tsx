@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Mic, Image, Send, X, Trash2, Reply } from 'lucide-react';
 import { AttachmentSheet } from './AttachmentSheet';
 import { Message } from '../../types';
+import { useChat } from '../../context/ChatContext';
 
 interface MessageComposerProps {
   onSendMessage: (text: string) => void;
@@ -18,6 +19,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   replyingTo,
   onCancelReply,
 }) => {
+  const { broadcastTyping, uploadMediaFile, partner } = useChat();
+
   const [text, setText] = useState('');
   const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -27,6 +30,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -53,8 +57,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     };
   }, [isRecording]);
 
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setText(val);
+    broadcastTyping(true);
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      broadcastTyping(false);
+    }, 2500);
+  };
+
   const handleSend = () => {
     if (!text.trim()) return;
+    broadcastTyping(false);
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     onSendMessage(text.trim());
     setText('');
     if (textareaRef.current) {
@@ -89,13 +105,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const isVideo = file.type.startsWith('video');
+
+    // Try Supabase Storage upload first
+    const uploadedUrl = await uploadMediaFile(file, 'chat-media');
+    if (uploadedUrl) {
+      onSendMedia(uploadedUrl, isVideo ? 'video' : 'image', file.name);
+      return;
+    }
+
+    // Fallback to base64 DataURL
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        const isVideo = file.type.startsWith('video');
         onSendMedia(reader.result, isVideo ? 'video' : 'image', file.name);
       }
     };
@@ -130,7 +156,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             <Reply className="w-3.5 h-3.5 text-[#D91A8E] shrink-0" />
             <div className="truncate">
               <span className="font-semibold text-neutral-300">
-                Replying to {replyingTo.sender === 'user' ? 'yourself' : 'elena_120611'}:
+                Replying to {replyingTo.sender === 'user' ? 'yourself' : partner.name}:
               </span>{' '}
               <span className="text-neutral-500 truncate">
                 {replyingTo.content || 'Media message'}
@@ -202,7 +228,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               <textarea
                 ref={textareaRef}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={handleTextChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Message..."
                 rows={1}

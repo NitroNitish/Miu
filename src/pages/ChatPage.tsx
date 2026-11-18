@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
@@ -9,10 +10,13 @@ import { MediaViewer } from '../components/memories/MediaViewer';
 import { Toast } from '../components/common/Toast';
 import { Modal } from '../components/common/Modal';
 import { useChat } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
 import { Message, MemoryItem } from '../types';
-import { ArrowDown, CheckCheck } from 'lucide-react';
+import { ArrowDown, CheckCheck, Sparkles } from 'lucide-react';
 
 export const ChatPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { connection, isConfigured } = useAuth();
   const {
     messages,
     isPartnerTyping,
@@ -275,6 +279,26 @@ export const ChatPage: React.FC = () => {
               Today
             </div>
           </div>
+
+          {/* Awaiting connection prompt if user is in configured Supabase mode but hasn't paired yet */}
+          {isConfigured && !connection && (
+            <div className="my-4 mx-auto max-w-sm p-5 rounded-2xl bg-[#141414] border border-[#262626] text-center space-y-3 animate-fade-in">
+              <div className="w-10 h-10 mx-auto rounded-full bg-[#A99BCB]/15 text-[#A99BCB] flex items-center justify-center">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-semibold text-white">Private Space Awaiting Partner</h4>
+              <p className="text-xs text-[#8E8E8E] leading-relaxed">
+                Generate a single-use invitation link in your profile to connect your partner and start messaging.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#D91A8E] to-[#6366F1] text-white text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <span>Invite Your Partner</span>
+              </button>
+            </div>
+          )}
 
           {/* Render All Messages with grouping, swipe timestamp reveal, and Instagram gradient */}
           <div className="flex-1 flex flex-col justify-end w-full">

@@ -17,9 +17,14 @@ import {
   UserCheck,
   Camera,
   Check,
+  Sparkles,
+  Copy,
+  Link as LinkIcon,
+  Unlink,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useChat } from '../context/ChatContext';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/common/Avatar';
 import { Modal } from '../components/common/Modal';
@@ -29,9 +34,15 @@ import { ThemeMode } from '../types';
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { themeMode, setThemeMode } = useTheme();
-  const { partner, user } = useChat();
+  const { partner } = useChat();
+  const { user: authUser, connection, createInvitation, disconnectConnection, logout } = useAuth();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Invitation Modal state
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
+  const [inviteData, setInviteData] = useState<{ link: string; shortCode: string } | null>(null);
 
   // Settings toggles
   const [onlineVisibility, setOnlineVisibility] = useState(true);
@@ -50,6 +61,44 @@ export const ProfilePage: React.FC = () => {
   const handleClearCache = () => {
     setCacheSize('0.0 KB');
     setToastMessage('Temporary media cache cleared');
+  };
+
+  const handleGenerateInvite = async () => {
+    setIsGeneratingInvite(true);
+    const res = await createInvitation();
+    setIsGeneratingInvite(false);
+
+    if (res.success && res.link && res.shortCode) {
+      setInviteData({ link: res.link, shortCode: res.shortCode });
+      setIsInviteModalOpen(true);
+    } else {
+      setToastMessage(res.error || 'Could not generate invitation link.');
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (inviteData?.link) {
+      navigator.clipboard?.writeText(inviteData.link);
+      setToastMessage('Invitation link copied to clipboard!');
+    }
+  };
+
+  const handleCopyCode = () => {
+    if (inviteData?.shortCode) {
+      navigator.clipboard?.writeText(inviteData.shortCode);
+      setToastMessage(`Invitation code ${inviteData.shortCode} copied!`);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (window.confirm('Disconnect from this private space? Both participants will be unlinked.')) {
+      const res = await disconnectConnection();
+      if (res.success) {
+        setToastMessage('Connection disconnected.');
+      } else {
+        setToastMessage(res.error || 'Failed to disconnect.');
+      }
+    }
   };
 
   const themeOptions: { id: ThemeMode; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -109,6 +158,66 @@ export const ProfilePage: React.FC = () => {
           >
             Edit profile
           </button>
+        </div>
+
+        {/* PRIVATE CONNECTION & INVITATION SECTION */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-[#777777] dark:text-[#999999] uppercase tracking-wider px-1">
+            Private Connection
+          </h3>
+          <div className="bg-[#FFFFFF] dark:bg-[#191A1D] border border-[#EEEEEC] dark:border-[#303136] rounded-2xl p-4 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                    connection?.status === 'accepted'
+                      ? 'bg-[#35B779]/10 text-[#35B779]'
+                      : 'bg-amber-500/10 text-amber-500'
+                  }`}
+                >
+                  <Shield className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-[#171717] dark:text-[#F5F5F5]">
+                      {connection?.status === 'accepted' ? 'Connected' : 'Awaiting Connection'}
+                    </span>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        connection?.status === 'accepted' ? 'bg-[#35B779] animate-pulse' : 'bg-amber-500'
+                      }`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-[#777777] dark:text-[#999999]">
+                    {connection?.status === 'accepted'
+                      ? `Exclusive link with @${partner.handle.replace('@', '')}`
+                      : 'Invite your partner to establish your private space'}
+                  </p>
+                </div>
+              </div>
+
+              {connection?.status === 'accepted' ? (
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <Unlink className="w-3.5 h-3.5" />
+                  <span>Disconnect</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGenerateInvite}
+                  disabled={isGeneratingInvite}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#1E1F24] dark:bg-[#B6A4DC] text-white dark:text-[#111214] text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{isGeneratingInvite ? 'Generating...' : 'Invite Someone'}</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* SETTINGS GROUP 1: APPEARANCE */}
@@ -300,6 +409,22 @@ export const ProfilePage: React.FC = () => {
             Account & Security
           </h3>
           <div className="bg-[#FFFFFF] dark:bg-[#191A1D] border border-[#EEEEEC] dark:border-[#303136] rounded-2xl divide-y divide-[#EEEEEC] dark:divide-[#303136] shadow-xs">
+            {authUser && (
+              <div className="p-3.5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-[#171717] dark:text-[#F5F5F5]">
+                    Logged in as
+                  </p>
+                  <p className="text-[11px] text-[#777777] dark:text-[#999999]">
+                    @{authUser.username} ({authUser.display_name})
+                  </p>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 font-medium border border-neutral-200 dark:border-neutral-700">
+                  Active User
+                </span>
+              </div>
+            )}
+
             <button
               onClick={() => setIsPasswordModalOpen(true)}
               className="w-full flex items-center justify-between p-3.5 hover:bg-neutral-50 dark:hover:bg-neutral-800/40 transition-colors text-left cursor-pointer"
@@ -314,8 +439,9 @@ export const ProfilePage: React.FC = () => {
             </button>
 
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (window.confirm('Log out of this private session?')) {
+                  await logout();
                   navigate('/login');
                 }
               }}
@@ -327,6 +453,71 @@ export const ProfilePage: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Private Invitation Modal */}
+      <Modal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        title="PRIVATE INVITATION"
+      >
+        <div className="space-y-4 py-1">
+          <div className="text-center space-y-1">
+            <p className="text-sm font-semibold text-[#171717] dark:text-[#F5F5F5]">
+              Your invitation is ready.
+            </p>
+            <p className="text-xs text-[#777777] dark:text-[#999999]">
+              Share this single-use link or code with the one person you want to connect with.
+            </p>
+          </div>
+
+          {/* Invitation Link Box */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-[#777777] dark:text-[#999999] uppercase tracking-wider">
+              Invitation Link
+            </label>
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
+              <LinkIcon className="w-4 h-4 text-neutral-400 shrink-0" />
+              <input
+                readOnly
+                value={inviteData?.link || ''}
+                className="flex-1 bg-transparent text-xs text-[#171717] dark:text-[#F5F5F5] outline-none truncate font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="px-3 py-1 rounded-lg bg-[#202124] text-white dark:bg-[#B6A4DC] dark:text-[#111214] text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer shrink-0 flex items-center gap-1"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Link</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Invitation Short Code */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-[#777777] dark:text-[#999999] uppercase tracking-wider">
+              Short Code
+            </label>
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
+              <span className="text-sm font-bold font-mono tracking-wider text-[#171717] dark:text-[#F5F5F5] pl-1">
+                {inviteData?.shortCode || ''}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                className="px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Code</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-center text-[#8C867E] dark:text-[#999999] pt-1">
+            Expires in 24 hours. Single-use only.
+          </p>
+        </div>
+      </Modal>
 
       {/* Edit Profile Modal */}
       <Modal
