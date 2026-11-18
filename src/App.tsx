@@ -16,6 +16,7 @@ import { DoodlePage } from './pages/DoodlePage';
 import { DailyQuestionPage } from './pages/DailyQuestionPage';
 import { MemoriesPage } from './pages/MemoriesPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { TicTacToePage } from './pages/TicTacToePage';
 
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -80,6 +81,8 @@ export function App() {
                 <Route path="/chat" element={<ChatPage />} />
                 <Route path="/chats" element={<ChatsPage />} />
                 <Route path="/together" element={<TogetherPage />} />
+                <Route path="/together/tic-tac-toe" element={<TicTacToePage />} />
+                <Route path="/games/tic-tac-toe" element={<TicTacToePage />} />
                 <Route path="/doodle" element={<DoodlePage />} />
                 <Route path="/daily-question" element={<DailyQuestionPage />} />
                 <Route path="/memories" element={<MemoriesPage />} />

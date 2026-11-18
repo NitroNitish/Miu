@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Image, Video, Camera, Eye, Sparkles } from 'lucide-react';
+import { Image, Video, Camera, Eye, Sparkles, Gamepad2 } from 'lucide-react';
 import { BottomSheet } from '../common/BottomSheet';
 import { useNavigate } from 'react-router-dom';
 
@@ -81,16 +81,16 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({
       />
 
       {/* Grid of Attachment Options */}
-      <div className="grid grid-cols-4 gap-3 py-3">
+      <div className="grid grid-cols-5 gap-2 py-3">
         {/* Photos */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 p-2 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
+          className="flex flex-col items-center gap-1.5 p-1.5 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
         >
-          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-neutral-800 dark:text-neutral-200 group-hover:scale-105 transition-transform">
+          <div className="w-11 h-11 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-neutral-800 dark:text-neutral-200 group-hover:scale-105 transition-transform">
             <Image className="w-5 h-5 stroke-[1.8]" />
           </div>
-          <span className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+          <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">
             Photos
           </span>
         </button>
@@ -98,12 +98,12 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({
         {/* Camera */}
         <button
           onClick={() => cameraInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 p-2 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
+          className="flex flex-col items-center gap-1.5 p-1.5 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
         >
-          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-neutral-800 dark:text-neutral-200 group-hover:scale-105 transition-transform">
+          <div className="w-11 h-11 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-neutral-800 dark:text-neutral-200 group-hover:scale-105 transition-transform">
             <Camera className="w-5 h-5 stroke-[1.8]" />
           </div>
-          <span className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+          <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">
             Camera
           </span>
         </button>
@@ -111,18 +111,17 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({
         {/* View Once */}
         <button
           onClick={() => {
-            // Pick photo as view once
             handleSelectCurated(curatedPhotos[1].url, true);
           }}
-          className="flex flex-col items-center gap-2 p-2 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
+          className="flex flex-col items-center gap-1.5 p-1.5 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[#A99BCB]/15 dark:bg-[#B6A4DC]/15 border border-[#A99BCB]/40 dark:border-[#B6A4DC]/40 flex items-center justify-center text-[#A99BCB] dark:text-[#B6A4DC] group-hover:scale-105 transition-transform relative">
+          <div className="w-11 h-11 rounded-2xl bg-[#A99BCB]/15 dark:bg-[#B6A4DC]/15 border border-[#A99BCB]/40 dark:border-[#B6A4DC]/40 flex items-center justify-center text-[#A99BCB] dark:text-[#B6A4DC] group-hover:scale-105 transition-transform relative">
             <Eye className="w-5 h-5 stroke-[1.8]" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#A99BCB] dark:bg-[#B6A4DC] text-white dark:text-[#111214] text-[9px] font-bold flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#A99BCB] dark:bg-[#B6A4DC] text-white dark:text-[#111214] text-[8px] font-bold flex items-center justify-center">
               1
             </span>
           </div>
-          <span className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+          <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">
             View Once
           </span>
         </button>
@@ -133,13 +132,29 @@ export const AttachmentSheet: React.FC<AttachmentSheetProps> = ({
             onClose();
             navigate('/doodle');
           }}
-          className="flex flex-col items-center gap-2 p-2 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
+          className="flex flex-col items-center gap-1.5 p-1.5 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
         >
-          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-neutral-800 dark:text-neutral-200 group-hover:scale-105 transition-transform">
+          <div className="w-11 h-11 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-neutral-800 dark:text-neutral-200 group-hover:scale-105 transition-transform">
             <Sparkles className="w-5 h-5 stroke-[1.8]" />
           </div>
-          <span className="text-[12px] font-medium text-neutral-700 dark:text-neutral-300">
+          <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">
             Doodle
+          </span>
+        </button>
+
+        {/* Play X & O */}
+        <button
+          onClick={() => {
+            onClose();
+            navigate('/together/tic-tac-toe');
+          }}
+          className="flex flex-col items-center gap-1.5 p-1.5 rounded-2xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer group"
+        >
+          <div className="w-11 h-11 rounded-2xl bg-[#A99BCB]/15 dark:bg-[#B6A4DC]/15 border border-[#A99BCB]/40 dark:border-[#B6A4DC]/40 flex items-center justify-center text-[#826FB5] dark:text-[#B6A4DC] group-hover:scale-105 transition-transform">
+            <Gamepad2 className="w-5 h-5 stroke-[1.8]" />
+          </div>
+          <span className="text-[11px] font-medium text-neutral-700 dark:text-neutral-300">
+            X & 0
           </span>
         </button>
       </div>

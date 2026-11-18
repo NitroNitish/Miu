@@ -1,11 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Pencil, CircleHelp, ChevronRight } from 'lucide-react';
+import { Pencil, CircleHelp, ChevronRight, Gamepad2 } from 'lucide-react';
 
 export const TogetherPage: React.FC = () => {
   const navigate = useNavigate();
 
   const cards = [
+    {
+      id: 'tic-tac-toe',
+      title: 'X & 0 (Tic-Tac-Toe)',
+      description: 'Play live turns with your partner, pass & play, or practice with Miu AI.',
+      icon: Gamepad2,
+      action: () => navigate('/together/tic-tac-toe'),
+      badge: 'New • 2 Player',
+    },
     {
       id: 'doodle',
       title: 'Shared Doodle',
