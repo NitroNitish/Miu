@@ -234,6 +234,7 @@ AS $$
 $$;
 
 -- PROFILES POLICIES
+DROP POLICY IF EXISTS "Users can read own profile or connected partner profile" ON public.profiles;
 CREATE POLICY "Users can read own profile or connected partner profile"
 ON public.profiles FOR SELECT
 USING (
@@ -246,47 +247,57 @@ USING (
   )
 );
 
+DROP POLICY IF EXISTS "Users can insert their own profile upon registration" ON public.profiles;
 CREATE POLICY "Users can insert their own profile upon registration"
 ON public.profiles FOR INSERT
 WITH CHECK (id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 CREATE POLICY "Users can update their own profile"
 ON public.profiles FOR UPDATE
 USING (id = auth.uid())
 WITH CHECK (id = auth.uid());
 
 -- CONNECTIONS POLICIES
+DROP POLICY IF EXISTS "Users can read their own connections" ON public.connections;
 CREATE POLICY "Users can read their own connections"
 ON public.connections FOR SELECT
 USING (user_one_id = auth.uid() OR user_two_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update their own connection" ON public.connections;
 CREATE POLICY "Users can update their own connection"
 ON public.connections FOR UPDATE
 USING (user_one_id = auth.uid() OR user_two_id = auth.uid());
 
 -- INVITATIONS POLICIES
+DROP POLICY IF EXISTS "Creators can view their invitations" ON public.invitations;
 CREATE POLICY "Creators can view their invitations"
 ON public.invitations FOR SELECT
 USING (creator_id = auth.uid());
 
+DROP POLICY IF EXISTS "Creators can insert invitations" ON public.invitations;
 CREATE POLICY "Creators can insert invitations"
 ON public.invitations FOR INSERT
 WITH CHECK (creator_id = auth.uid());
 
+DROP POLICY IF EXISTS "Creators can update their invitations" ON public.invitations;
 CREATE POLICY "Creators can update their invitations"
 ON public.invitations FOR UPDATE
 USING (creator_id = auth.uid());
 
 -- CONVERSATIONS POLICIES
+DROP POLICY IF EXISTS "Members can view their conversation" ON public.conversations;
 CREATE POLICY "Members can view their conversation"
 ON public.conversations FOR SELECT
 USING (public.is_connection_member(connection_id));
 
 -- MESSAGES POLICIES
+DROP POLICY IF EXISTS "Members can view conversation messages" ON public.messages;
 CREATE POLICY "Members can view conversation messages"
 ON public.messages FOR SELECT
 USING (public.is_conversation_member(conversation_id));
 
+DROP POLICY IF EXISTS "Members can insert messages as sender" ON public.messages;
 CREATE POLICY "Members can insert messages as sender"
 ON public.messages FOR INSERT
 WITH CHECK (
@@ -294,16 +305,19 @@ WITH CHECK (
   AND public.is_conversation_member(conversation_id)
 );
 
+DROP POLICY IF EXISTS "Senders can edit their own messages or recipients can update reactions" ON public.messages;
 CREATE POLICY "Senders can edit their own messages or recipients can update reactions"
 ON public.messages FOR UPDATE
 USING (public.is_conversation_member(conversation_id))
 WITH CHECK (public.is_conversation_member(conversation_id));
 
+DROP POLICY IF EXISTS "Senders can delete messages" ON public.messages;
 CREATE POLICY "Senders can delete messages"
 ON public.messages FOR DELETE
 USING (sender_id = auth.uid() AND public.is_conversation_member(conversation_id));
 
 -- MESSAGE RECEIPTS POLICIES
+DROP POLICY IF EXISTS "Members can view and create receipts" ON public.message_receipts;
 CREATE POLICY "Members can view and create receipts"
 ON public.message_receipts FOR ALL
 USING (
@@ -316,17 +330,20 @@ USING (
 );
 
 -- MEMORIES POLICIES
+DROP POLICY IF EXISTS "Members can access connection memories" ON public.memories;
 CREATE POLICY "Members can access connection memories"
 ON public.memories FOR ALL
 USING (public.is_connection_member(connection_id));
 
 -- DAILY QUESTIONS POLICIES
+DROP POLICY IF EXISTS "Authenticated users can read daily questions" ON public.daily_questions;
 CREATE POLICY "Authenticated users can read daily questions"
 ON public.daily_questions FOR SELECT
 TO authenticated
 USING (true);
 
 -- DAILY ANSWERS POLICIES
+DROP POLICY IF EXISTS "Users can read and write their answers and partner answers if both answered" ON public.daily_answers;
 CREATE POLICY "Users can read and write their answers and partner answers if both answered"
 ON public.daily_answers FOR ALL
 USING (
@@ -346,6 +363,7 @@ USING (
 );
 
 -- DOODLES POLICIES
+DROP POLICY IF EXISTS "Members can access connection doodles" ON public.doodles;
 CREATE POLICY "Members can access connection doodles"
 ON public.doodles FOR ALL
 USING (public.is_connection_member(connection_id));
@@ -840,12 +858,30 @@ BEGIN
 END;
 $$;
 
--- Enable Realtime publication on relevant tables
-ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.message_receipts;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.connections;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_answers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.doodles;
+-- Enable Realtime publication on relevant tables (safely ignores already added tables)
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.message_receipts;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.connections;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.daily_answers;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.doodles;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+END $$;
 
 -- Storage buckets configuration instructions:
 -- In Supabase Dashboard -> Storage -> Create Buckets:
