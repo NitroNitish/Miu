@@ -411,7 +411,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // CREATE INVITATION
   const createInvitation = async () => {
-    if (!user) {
+    let currentUserId = user?.id;
+    if (isSupabaseConfigured && !currentUserId) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      currentUserId = sessionData.session?.user?.id;
+    }
+
+    if (!currentUserId && !user) {
       return { success: false, error: 'You must be logged in to create an invitation.' };
     }
 
@@ -452,21 +458,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // VALIDATE INVITATION
-  const validateInvitation = async (token: string) => {
-    if (!token) return { valid: false, error: 'No invitation token provided.' };
+  const validateInvitation = async (tokenOrCode: string) => {
+    const clean = tokenOrCode.trim();
+    if (!clean) return { valid: false, error: 'No invitation link or code provided.' };
 
     if (!isSupabaseConfigured) {
       return {
         valid: true,
         creatorName: 'Alexander',
         creatorUsername: 'alexander',
+        shortCode: 'DEMO99',
       };
     }
 
     try {
-      const tokenHash = await hashToken(token);
+      // If it looks like a full 48-char hex token, hash it. If it's a short code (e.g. 6 chars), pass as-is.
+      const lookupSecret = clean.length > 20 ? await hashToken(clean) : clean;
       const { data, error } = await supabase.rpc('validate_invitation', {
-        p_token_hash: tokenHash,
+        p_token_hash: lookupSecret,
       });
 
       if (error || !data || !data.valid) {
@@ -477,6 +486,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         valid: true,
         creatorName: data.creator_name,
         creatorUsername: data.creator_username,
+        shortCode: data.short_code,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Validation failed';
@@ -485,8 +495,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // ACCEPT INVITATION (Atomic Pairing)
-  const acceptInvitation = async (token: string) => {
-    if (!user) {
+  const acceptInvitation = async (tokenOrCode: string) => {
+    let currentUserId = user?.id;
+    if (isSupabaseConfigured) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user) {
+        currentUserId = sessionData.session.user.id;
+        if (!user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUserId)
+            .maybeSingle();
+          if (profile) {
+            setUser(profile);
+            localStorage.setItem('miu_auth_user', JSON.stringify(profile));
+          }
+        }
+      }
+    }
+
+    if (!currentUserId && !user) {
       return { success: false, error: 'You must create an account first to accept an invitation.' };
     }
 
@@ -494,7 +523,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const mockConn: Connection = {
         id: 'conn-demo-new',
         user_one_id: 'partner-1',
-        user_two_id: user.id,
+        user_two_id: currentUserId || user?.id || 'partner-2',
         status: 'accepted',
         created_at: new Date().toISOString(),
         conversation_id: 'conv-demo-new',
@@ -505,16 +534,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const tokenHash = await hashToken(token);
+      const clean = tokenOrCode.trim();
+      const lookupSecret = clean.length > 20 ? await hashToken(clean) : clean;
       const { data, error } = await supabase.rpc('accept_invitation', {
-        p_token_hash: tokenHash,
+        p_token_hash: lookupSecret,
       });
 
       if (error || !data || !data.success) {
         return { success: false, error: data?.error || error?.message || 'Failed to accept invitation.' };
       }
 
-      await fetchConnection(user.id);
+      if (currentUserId) {
+        await fetchConnection(currentUserId);
+      }
       return { success: true, connectionId: data.connection_id };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Acceptance failed';

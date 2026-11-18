@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Shield, Sparkles, AlertCircle, ArrowRight, Sun, Moon } from 'lucide-react';
+import { Shield, Sparkles, AlertCircle, ArrowRight, Sun, Moon, KeyRound } from 'lucide-react';
 
 export const JoinPage: React.FC = () => {
-  const { token } = useParams<{ token: string }>();
+  const { token: urlToken } = useParams<{ token?: string }>();
   const navigate = useNavigate();
   const { user, validateInvitation, acceptInvitation, register } = useAuth();
   const { isDark, setThemeMode } = useTheme();
 
-  const [isValidating, setIsValidating] = useState(true);
-  const [isValid, setIsValid] = useState(false);
+  const [activeToken, setActiveToken] = useState<string>(urlToken || '');
+  const [inputCode, setInputCode] = useState<string>('');
+  const [isValidating, setIsValidating] = useState<boolean>(Boolean(urlToken));
+  const [isValid, setIsValid] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inviterName, setInviterName] = useState<string>('Your partner');
   const [inviterUsername, setInviterUsername] = useState<string>('');
@@ -23,37 +25,49 @@ export const JoinPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Validate token or code
+  const runValidation = async (secret: string) => {
+    const clean = secret.trim();
+    if (!clean) return;
+
+    setIsValidating(true);
+    setErrorMessage(null);
+    setFormError(null);
+
+    const res = await validateInvitation(clean);
+    setIsValidating(false);
+
+    if (res.valid) {
+      setIsValid(true);
+      setActiveToken(clean);
+      if (res.creatorName) setInviterName(res.creatorName);
+      if (res.creatorUsername) setInviterUsername(res.creatorUsername);
+    } else {
+      setIsValid(false);
+      setErrorMessage(res.error || 'This invitation has expired or is invalid.');
+    }
+  };
+
   useEffect(() => {
-    const checkToken = async () => {
-      if (!token) {
-        setIsValidating(false);
-        setErrorMessage('No invitation token provided in the link.');
-        return;
-      }
-
-      setIsValidating(true);
-      const res = await validateInvitation(token);
+    if (urlToken) {
+      runValidation(urlToken);
+    } else {
       setIsValidating(false);
+    }
+  }, [urlToken]);
 
-      if (res.valid) {
-        setIsValid(true);
-        if (res.creatorName) setInviterName(res.creatorName);
-        if (res.creatorUsername) setInviterUsername(res.creatorUsername);
-      } else {
-        setIsValid(false);
-        setErrorMessage(res.error || 'This invitation has expired or is invalid.');
-      }
-    };
-
-    checkToken();
-  }, [token, validateInvitation]);
+  const handleManualCodeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputCode.trim()) return;
+    await runValidation(inputCode.trim());
+  };
 
   const handleAcceptLoggedIn = async () => {
-    if (!token) return;
+    if (!activeToken) return;
     setIsSubmitting(true);
     setFormError(null);
 
-    const res = await acceptInvitation(token);
+    const res = await acceptInvitation(activeToken);
     setIsSubmitting(false);
 
     if (res.success) {
@@ -65,7 +79,7 @@ export const JoinPage: React.FC = () => {
 
   const handleRegisterAndAccept = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
+    if (!activeToken) return;
 
     if (!username.trim() || !password) {
       setFormError('Please enter both a username and password.');
@@ -89,7 +103,7 @@ export const JoinPage: React.FC = () => {
     }
 
     // 2. Accept invitation atomically
-    const acceptRes = await acceptInvitation(token);
+    const acceptRes = await acceptInvitation(activeToken);
     setIsSubmitting(false);
 
     if (acceptRes.success) {
@@ -132,22 +146,40 @@ export const JoinPage: React.FC = () => {
             </p>
           </div>
         ) : !isValid ? (
-          /* Error Screen */
-          <div className="py-10 flex flex-col items-center text-center space-y-4">
-            <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-950/40 text-red-500 flex items-center justify-center">
-              <AlertCircle className="w-7 h-7" />
+          /* Enter Code or Error Screen */
+          <div className="py-8 flex flex-col items-center text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-[#A99BCB]/15 dark:bg-[#B6A4DC]/20 text-[#A99BCB] dark:text-[#B6A4DC] flex items-center justify-center">
+              <KeyRound className="w-7 h-7" />
             </div>
             <h2 className="text-xl font-bold text-[#1C1B1F] dark:text-[#F5F5F5]">
-              Invitation Unavailable
+              {errorMessage ? 'Invitation Unavailable' : 'Private Invitation'}
             </h2>
-            <p className="text-sm text-[#8C867E] dark:text-[#999999] max-w-xs leading-relaxed">
-              {errorMessage || 'This private invitation has expired or has already been used.'}
+            <p className="text-xs text-[#8C867E] dark:text-[#999999] max-w-xs leading-relaxed">
+              {errorMessage || 'Enter the 6-character code or full invitation link from your partner.'}
             </p>
+
+            <form onSubmit={handleManualCodeSubmit} className="w-full space-y-3 pt-2">
+              <input
+                type="text"
+                placeholder="Invitation Code (e.g. 7K9XY2)"
+                value={inputCode}
+                onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                className="w-full h-11 px-3.5 rounded-xl bg-[#FAF9F7] dark:bg-[#232428] border border-[#EAE5DE] dark:border-[#303136] text-sm text-center font-mono tracking-widest text-[#1C1B1F] dark:text-[#F5F5F5] outline-none focus:border-[#A99BCB]"
+                required
+              />
+              <button
+                type="submit"
+                className="w-full h-11 rounded-xl bg-[#1E1F24] dark:bg-[#B6A4DC] text-white dark:text-[#111214] font-semibold text-xs hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shadow-xs"
+              >
+                Validate Invitation
+              </button>
+            </form>
+
             <button
               onClick={() => navigate('/login')}
-              className="mt-4 px-6 py-2.5 rounded-xl bg-[#1E1F24] dark:bg-[#B6A4DC] text-white dark:text-[#111214] text-sm font-semibold hover:opacity-90 transition-all cursor-pointer"
+              className="text-xs text-[#8C867E] dark:text-[#999999] hover:underline pt-2 cursor-pointer"
             >
-              Go to Login
+              Back to Login
             </button>
           </div>
         ) : (

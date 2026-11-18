@@ -572,6 +572,7 @@ CREATE OR REPLACE FUNCTION public.create_invitation(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
   v_user_id UUID := auth.uid();
@@ -581,6 +582,18 @@ DECLARE
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Ensure creator profile exists
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_user_id) THEN
+    INSERT INTO public.profiles (id, username, normalized_username, display_name)
+    SELECT 
+      v_user_id,
+      COALESCE(raw_user_meta_data->>'username', split_part(email, '@', 1)),
+      lower(COALESCE(raw_user_meta_data->>'username', split_part(email, '@', 1))),
+      COALESCE(raw_user_meta_data->>'display_name', split_part(email, '@', 1))
+    FROM auth.users
+    WHERE id = v_user_id;
   END IF;
 
   -- Ensure creator is not already in an active connection
@@ -609,7 +622,7 @@ BEGIN
   ) VALUES (
     v_user_id,
     p_token_hash,
-    p_short_code,
+    upper(trim(p_short_code)),
     'pending',
     v_expires_at
   )
@@ -618,7 +631,7 @@ BEGIN
   RETURN jsonb_build_object(
     'success', true,
     'invitation_id', v_invite_id,
-    'short_code', p_short_code,
+    'short_code', upper(trim(p_short_code)),
     'expires_at', v_expires_at
   );
 END;
@@ -629,18 +642,23 @@ CREATE OR REPLACE FUNCTION public.validate_invitation(p_token_hash TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
   v_invite RECORD;
   v_creator RECORD;
+  v_secret TEXT := trim(p_token_hash);
 BEGIN
+  -- Match by token_hash or short_code
   SELECT * INTO v_invite
   FROM public.invitations
-  WHERE token_hash = p_token_hash
+  WHERE token_hash = v_secret
+     OR upper(short_code) = upper(v_secret)
+  ORDER BY created_at DESC
   LIMIT 1;
 
   IF v_invite IS NULL THEN
-    RETURN jsonb_build_object('valid', false, 'error', 'Invalid invitation link.');
+    RETURN jsonb_build_object('valid', false, 'error', 'Invalid invitation link or code.');
   END IF;
 
   IF v_invite.status = 'accepted' THEN
@@ -654,6 +672,15 @@ BEGIN
   IF v_invite.expires_at < now() THEN
     UPDATE public.invitations SET status = 'expired' WHERE id = v_invite.id;
     RETURN jsonb_build_object('valid', false, 'error', 'This invitation has expired.');
+  END IF;
+
+  -- Check if creator is already in an active connection
+  IF EXISTS (
+    SELECT 1 FROM public.connections
+    WHERE (user_one_id = v_invite.creator_id OR user_two_id = v_invite.creator_id)
+      AND status = 'accepted'
+  ) THEN
+    RETURN jsonb_build_object('valid', false, 'error', 'The inviter already has an active connection.');
   END IF;
 
   -- Fetch creator details
@@ -677,6 +704,7 @@ CREATE OR REPLACE FUNCTION public.accept_invitation(p_token_hash TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
   v_recipient_id UUID := auth.uid();
@@ -684,15 +712,30 @@ DECLARE
   v_connection_id UUID;
   v_conversation_id UUID;
   v_existing_active UUID;
+  v_secret TEXT := trim(p_token_hash);
 BEGIN
   IF v_recipient_id IS NULL THEN
     RAISE EXCEPTION 'You must be logged in to accept an invitation.';
   END IF;
 
+  -- Ensure recipient profile exists
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_recipient_id) THEN
+    INSERT INTO public.profiles (id, username, normalized_username, display_name)
+    SELECT 
+      v_recipient_id,
+      COALESCE(raw_user_meta_data->>'username', split_part(email, '@', 1)),
+      lower(COALESCE(raw_user_meta_data->>'username', split_part(email, '@', 1))),
+      COALESCE(raw_user_meta_data->>'display_name', split_part(email, '@', 1))
+    FROM auth.users
+    WHERE id = v_recipient_id;
+  END IF;
+
   -- Lock invitation row to prevent race conditions
   SELECT * INTO v_invite
   FROM public.invitations
-  WHERE token_hash = p_token_hash
+  WHERE token_hash = v_secret
+     OR upper(short_code) = upper(v_secret)
+  ORDER BY created_at DESC
   FOR UPDATE;
 
   IF v_invite IS NULL THEN
@@ -727,6 +770,18 @@ BEGIN
 
   IF v_existing_active IS NOT NULL THEN
     RAISE EXCEPTION 'The inviter is already connected with someone else.';
+  END IF;
+
+  -- Ensure creator profile exists
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_invite.creator_id) THEN
+    INSERT INTO public.profiles (id, username, normalized_username, display_name)
+    SELECT 
+      v_invite.creator_id,
+      COALESCE(raw_user_meta_data->>'username', split_part(email, '@', 1)),
+      lower(COALESCE(raw_user_meta_data->>'username', split_part(email, '@', 1))),
+      COALESCE(raw_user_meta_data->>'display_name', split_part(email, '@', 1))
+    FROM auth.users
+    WHERE id = v_invite.creator_id;
   END IF;
 
   -- Mark invitation accepted
@@ -784,6 +839,7 @@ CREATE OR REPLACE FUNCTION public.open_view_once_media(p_message_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
   v_caller_id UUID := auth.uid();
@@ -838,6 +894,7 @@ CREATE OR REPLACE FUNCTION public.disconnect_connection(p_connection_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public, auth, pg_temp
 AS $$
 DECLARE
   v_caller_id UUID := auth.uid();
@@ -857,6 +914,14 @@ BEGIN
   RETURN jsonb_build_object('success', true);
 END;
 $$;
+
+-- Function Execution Privileges
+GRANT EXECUTE ON FUNCTION public.validate_invitation(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.register_username_account(TEXT, TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_invitation(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.accept_invitation(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.disconnect_connection(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.open_view_once_media(UUID) TO authenticated;
 
 -- Enable Realtime publication on relevant tables (safely ignores already added tables)
 DO $$

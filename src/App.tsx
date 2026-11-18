@@ -71,7 +71,9 @@ export function App() {
                 <Route path="/splash" element={<SplashScreen />} />
                 <Route path="/login" element={<AuthPage />} />
                 <Route path="/auth" element={<Navigate to="/login" replace />} />
+                <Route path="/join" element={<JoinPage />} />
                 <Route path="/join/:token" element={<JoinPage />} />
+                <Route path="/invite" element={<JoinPage />} />
                 <Route path="/invite/:token" element={<JoinPage />} />
 
                 {/* Main Application Screens */}
