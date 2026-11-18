@@ -354,6 +354,118 @@ USING (public.is_connection_member(connection_id));
 -- DATABASE FUNCTIONS / STORED PROCEDURES (RPCs)
 -- ==============================================================================
 
+-- 0. DIRECT USERNAME-ONLY REGISTRATION (Bypasses email rate limits & auto-confirms user)
+CREATE OR REPLACE FUNCTION public.register_username_account(
+  p_username TEXT,
+  p_password TEXT,
+  p_display_name TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions
+AS $$
+DECLARE
+  v_normalized TEXT;
+  v_synthetic_email TEXT;
+  v_user_id UUID;
+  v_encrypted_pw TEXT;
+BEGIN
+  -- Normalize username
+  v_normalized := lower(regexp_replace(trim(p_username), '[^a-zA-Z0-9_]', '', 'g'));
+
+  IF char_length(v_normalized) < 3 OR char_length(v_normalized) > 20 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Username must be between 3 and 20 characters.');
+  END IF;
+
+  IF char_length(p_password) < 6 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Password must be at least 6 characters.');
+  END IF;
+
+  -- Check if username already exists in profiles
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE normalized_username = v_normalized) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'This username is already taken. Please choose another.');
+  END IF;
+
+  v_synthetic_email := 'user_' || v_normalized || '@internal.miu.app';
+
+  -- Check if user exists in auth.users
+  SELECT id INTO v_user_id FROM auth.users WHERE email = v_synthetic_email;
+  IF v_user_id IS NOT NULL THEN
+    v_encrypted_pw := extensions.crypt(p_password, extensions.gen_salt('bf', 10));
+    UPDATE auth.users
+    SET encrypted_password = v_encrypted_pw,
+        email_confirmed_at = COALESCE(email_confirmed_at, now()),
+        updated_at = now()
+    WHERE id = v_user_id;
+
+    INSERT INTO public.profiles (id, username, normalized_username, display_name, bio)
+    VALUES (v_user_id, p_username, v_normalized, COALESCE(NULLIF(trim(p_display_name), ''), p_username), 'Private by design.')
+    ON CONFLICT (id) DO UPDATE
+    SET username = EXCLUDED.username,
+        display_name = EXCLUDED.display_name;
+
+    RETURN jsonb_build_object('success', true, 'user_id', v_user_id, 'username', p_username, 'email', v_synthetic_email);
+  END IF;
+
+  v_user_id := gen_random_uuid();
+  v_encrypted_pw := extensions.crypt(p_password, extensions.gen_salt('bf', 10));
+
+  -- Insert directly into auth.users (auto-confirmed, zero emails sent, zero rate limits!)
+  INSERT INTO auth.users (
+    instance_id,
+    id,
+    aud,
+    role,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    created_at,
+    updated_at,
+    raw_app_meta_data,
+    raw_user_meta_data,
+    is_super_admin
+  ) VALUES (
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    v_user_id,
+    'authenticated',
+    'authenticated',
+    v_synthetic_email,
+    v_encrypted_pw,
+    now(),
+    now(),
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    jsonb_build_object('username', p_username, 'display_name', p_display_name),
+    false
+  );
+
+  -- Insert profile
+  INSERT INTO public.profiles (
+    id,
+    username,
+    normalized_username,
+    display_name,
+    bio
+  ) VALUES (
+    v_user_id,
+    p_username,
+    v_normalized,
+    COALESCE(NULLIF(trim(p_display_name), ''), p_username),
+    'Private by design.'
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_user_id,
+    'username', p_username,
+    'email', v_synthetic_email
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.register_username_account TO anon, authenticated;
+
 -- 1. CREATE INVITATION
 CREATE OR REPLACE FUNCTION public.create_invitation(
   p_token_hash TEXT,

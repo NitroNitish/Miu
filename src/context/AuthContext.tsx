@@ -252,6 +252,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error || !data.user) {
+        if (error?.message?.toLowerCase().includes('not confirmed')) {
+          return {
+            success: false,
+            error:
+              "Account unconfirmed. In Supabase Dashboard → Authentication → Providers → Email, turn OFF 'Confirm email'.",
+          };
+        }
         return { success: false, error: error?.message || 'Incorrect username or password.' };
       }
 
@@ -324,7 +331,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: 'This username is already taken. Please choose another.' };
       }
 
-      // 2. Sign up with deterministic synthetic email identity
+      // 2. Try direct RPC registration (bypasses GoTrue email limits and auto-confirms user)
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('register_username_account', {
+        p_username: cleanUsername,
+        p_password: password,
+        p_display_name: displayName.trim() || cleanUsername,
+      });
+
+      if (!rpcErr && rpcData?.success) {
+        // Automatically sign in now that user is in auth.users
+        const loginRes = await login(cleanUsername, password);
+        return loginRes;
+      }
+
+      // 3. Fallback: Standard Supabase Auth SignUp if RPC is not yet in database
       const syntheticEmail = usernameToSyntheticEmail(cleanUsername);
       const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: syntheticEmail,
@@ -338,10 +358,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (authErr || !authData.user) {
+        if (authErr?.message?.toLowerCase().includes('rate limit')) {
+          return {
+            success: false,
+            error:
+              "Email rate limit reached: In Supabase Dashboard → Authentication → Providers → Email, please turn OFF 'Confirm email', or run the latest SQL update.",
+          };
+        }
         return { success: false, error: authErr?.message || 'Registration failed.' };
       }
 
-      // 3. Insert profile record
+      // 4. Insert profile record
       const newProfile: Profile = {
         id: authData.user.id,
         username: cleanUsername,
@@ -358,6 +385,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUser(newProfile);
       localStorage.setItem('miu_auth_user', JSON.stringify(newProfile));
+
+      // Sign in to establish active session
+      await login(cleanUsername, password);
+
       return { success: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
