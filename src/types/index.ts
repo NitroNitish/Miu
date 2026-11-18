@@ -52,7 +52,7 @@ export interface UserProfile {
   handle: string;
   avatar: string;
   bio: string;
-  phone: string;
+  phone?: string;
 }
 
 export interface MemoryItem {

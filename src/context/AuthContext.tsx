@@ -46,12 +46,36 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Profile | null>(() => {
     const saved = localStorage.getItem('miu_auth_user');
-    return saved ? JSON.parse(saved) : null;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.id === 'user-demo-1' || parsed.username === 'alexander') {
+          localStorage.removeItem('miu_auth_user');
+          return null;
+        }
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   });
 
   const [connection, setConnection] = useState<Connection | null>(() => {
     const saved = localStorage.getItem('miu_connection');
-    return saved ? JSON.parse(saved) : null;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.id === 'mock-conn-1' || parsed.id === 'conn-demo-new') {
+          localStorage.removeItem('miu_connection');
+          return null;
+        }
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   });
 
   const [partner, setPartner] = useState<PartnerProfile>(initialPartnerProfile);
@@ -78,18 +102,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchConnection = useCallback(
     async (userId: string) => {
       if (!isSupabaseConfigured) {
-        // Mock fallback connection
-        const mockConn: Connection = {
-          id: 'mock-conn-1',
-          user_one_id: userId,
-          user_two_id: 'partner-1',
-          status: 'accepted',
-          created_at: new Date().toISOString(),
-          conversation_id: 'mock-conv-1',
-        };
-        setConnection(mockConn);
+        setConnection(null);
         setPartner(initialPartnerProfile);
-        localStorage.setItem('miu_connection', JSON.stringify(mockConn));
+        localStorage.removeItem('miu_connection');
         return;
       }
 
@@ -141,22 +156,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
 
       if (!isSupabaseConfigured) {
-        // In local demo mode, check if a demo user was stored or seed Alexander
-        if (!user) {
-          const defaultDemoUser: Profile = {
-            id: 'user-demo-1',
-            username: initialUserProfile.handle.replace('@', ''),
-            normalized_username: initialUserProfile.handle.replace('@', '').toLowerCase(),
-            display_name: initialUserProfile.name,
-            avatar_url: initialUserProfile.avatar,
-            bio: initialUserProfile.bio,
-          };
-          setUser(defaultDemoUser);
-          localStorage.setItem('miu_auth_user', JSON.stringify(defaultDemoUser));
-          fetchConnection(defaultDemoUser.id);
-        } else {
-          fetchConnection(user.id);
-        }
         setIsLoading(false);
         return;
       }

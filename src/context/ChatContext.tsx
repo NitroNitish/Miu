@@ -56,7 +56,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [messages, setMessages] = useState<Message[]>(() => {
     if (isSecondParticipant) return [];
     const saved = localStorage.getItem('miu_messages');
-    return saved ? JSON.parse(saved) : initialMessages;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.some((m) => m.id === 'msg-1' || m.id === 'msg-12')) {
+          localStorage.removeItem('miu_messages');
+          return [];
+        }
+        return parsed;
+      } catch {
+        return [];
+      }
+    }
+    return initialMessages;
   });
 
   const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(false);
@@ -64,12 +76,36 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [memories, setMemories] = useState<MemoryItem[]>(() => {
     const saved = localStorage.getItem('miu_memories');
-    return saved ? JSON.parse(saved) : initialMemories;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.some((m) => m.id === 'mem-1' || m.id === 'mem-2')) {
+          localStorage.removeItem('miu_memories');
+          return [];
+        }
+        return parsed;
+      } catch {
+        return [];
+      }
+    }
+    return initialMemories;
   });
 
   const [dailyQuestions, setDailyQuestions] = useState<DailyQuestion[]>(() => {
     const saved = localStorage.getItem('miu_daily_questions');
-    return saved ? JSON.parse(saved) : initialDailyQuestions;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.some((q) => q.id === 'dq-today' || q.id === 'dq-yesterday')) {
+          localStorage.removeItem('miu_daily_questions');
+          return [];
+        }
+        return parsed;
+      } catch {
+        return [];
+      }
+    }
+    return initialDailyQuestions;
   });
 
   const [callState, setCallState] = useState<{ isInCall: boolean; type: 'audio' | 'video' | null }>({

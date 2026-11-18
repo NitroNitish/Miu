@@ -55,8 +55,8 @@ export const ProfilePage: React.FC = () => {
   // Modals
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [editName, setEditName] = useState(partner.name);
-  const [editBio, setEditBio] = useState(partner.bio);
+  const [editName, setEditName] = useState(authUser?.display_name || authUser?.username || '');
+  const [editBio, setEditBio] = useState(authUser?.bio || 'Private by design.');
 
   const handleClearCache = () => {
     setCacheSize('0.0 KB');
@@ -132,23 +132,28 @@ export const ProfilePage: React.FC = () => {
         {/* Profile Card Section */}
         <div className="flex flex-col items-center text-center p-6 bg-[#FFFFFF] dark:bg-[#191A1D] border border-[#EEEEEC] dark:border-[#303136] rounded-2xl shadow-xs animate-fade-in relative">
           <div className="relative mb-3">
-            <Avatar src={partner.avatar} name={partner.name} size="xl" showOnline />
+            <Avatar
+              src={authUser?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80'}
+              name={authUser?.display_name || authUser?.username || 'You'}
+              size="xl"
+              showOnline
+            />
           </div>
 
           <h2 className="text-lg font-bold text-[#171717] dark:text-[#F5F5F5]">
-            {partner.name}
+            {authUser?.display_name || authUser?.username || 'Your Account'}
           </h2>
           <p className="text-xs text-[#777777] dark:text-[#999999] mb-1">
-            {partner.handle}
+            {authUser?.username ? `@${authUser.username}` : '@you'}
           </p>
           <p className="text-xs text-neutral-600 dark:text-neutral-400 italic max-w-xs mb-3">
-            "{partner.bio}"
+            "{authUser?.bio || 'Private by design.'}"
           </p>
 
           <div className="flex items-center gap-2 mb-4">
             <span className="text-[11px] text-[#35B779] bg-[#35B779]/10 px-2.5 py-0.5 rounded-full font-medium border border-[#35B779]/20 flex items-center gap-1">
               <Shield className="w-3 h-3" />
-              <span>Direct Encrypted Link</span>
+              <span>Direct Encrypted Space</span>
             </span>
           </div>
 
