@@ -387,17 +387,48 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'This username is already taken. Please choose another.');
   END IF;
 
-  v_synthetic_email := 'user_' || v_normalized || '@internal.miu.app';
+  v_synthetic_email := v_normalized || '.miu@gmail.com';
 
-  -- Check if user exists in auth.users
-  SELECT id INTO v_user_id FROM auth.users WHERE email = v_synthetic_email;
+  -- Check if user exists in auth.users (either modern or legacy synthetic email)
+  SELECT id INTO v_user_id FROM auth.users 
+  WHERE email = v_synthetic_email 
+     OR email = ('user_' || v_normalized || '@internal.miu.app')
+  LIMIT 1;
+
   IF v_user_id IS NOT NULL THEN
     v_encrypted_pw := extensions.crypt(p_password, extensions.gen_salt('bf', 10));
     UPDATE auth.users
     SET encrypted_password = v_encrypted_pw,
+        email = v_synthetic_email,
         email_confirmed_at = COALESCE(email_confirmed_at, now()),
+        confirmation_token = COALESCE(confirmation_token, ''),
+        email_change = COALESCE(email_change, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        recovery_token = COALESCE(recovery_token, ''),
         updated_at = now()
     WHERE id = v_user_id;
+
+    -- Upsert into auth.identities (vital for GoTrue login scan)
+    DELETE FROM auth.identities WHERE user_id = v_user_id;
+    INSERT INTO auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      provider_id,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    ) VALUES (
+      v_user_id::text,
+      v_user_id,
+      json_build_object('sub', v_user_id::text, 'email', v_synthetic_email)::jsonb,
+      'email',
+      v_synthetic_email,
+      now(),
+      now(),
+      now()
+    );
 
     INSERT INTO public.profiles (id, username, normalized_username, display_name, bio)
     VALUES (v_user_id, p_username, v_normalized, COALESCE(NULLIF(trim(p_display_name), ''), p_username), 'Private by design.')
@@ -411,7 +442,7 @@ BEGIN
   v_user_id := gen_random_uuid();
   v_encrypted_pw := extensions.crypt(p_password, extensions.gen_salt('bf', 10));
 
-  -- Insert directly into auth.users (auto-confirmed, zero emails sent, zero rate limits!)
+  -- Insert directly into auth.users (auto-confirmed, zero emails sent, non-null tokens)
   INSERT INTO auth.users (
     instance_id,
     id,
@@ -422,6 +453,10 @@ BEGIN
     email_confirmed_at,
     created_at,
     updated_at,
+    confirmation_token,
+    recovery_token,
+    email_change_token_new,
+    email_change,
     raw_app_meta_data,
     raw_user_meta_data,
     is_super_admin
@@ -435,9 +470,35 @@ BEGIN
     now(),
     now(),
     now(),
+    '',
+    '',
+    '',
+    '',
     '{"provider":"email","providers":["email"]}'::jsonb,
     jsonb_build_object('username', p_username, 'display_name', p_display_name),
     false
+  );
+
+  -- Insert into auth.identities (Required by GoTrue for signInWithPassword)
+  DELETE FROM auth.identities WHERE user_id = v_user_id;
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    provider_id,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    v_user_id::text,
+    v_user_id,
+    json_build_object('sub', v_user_id::text, 'email', v_synthetic_email)::jsonb,
+    'email',
+    v_synthetic_email,
+    now(),
+    now(),
+    now()
   );
 
   -- Insert profile
@@ -465,6 +526,25 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.register_username_account TO anon, authenticated;
+
+-- AUTO CONFIRM & TOKEN SANITIZATION TRIGGER
+CREATE OR REPLACE FUNCTION public.handle_auto_confirm_user()
+RETURNS trigger AS $$
+BEGIN
+  NEW.email_confirmed_at := COALESCE(NEW.email_confirmed_at, now());
+  NEW.confirmation_token := COALESCE(NEW.confirmation_token, '');
+  NEW.recovery_token := COALESCE(NEW.recovery_token, '');
+  NEW.email_change_token_new := COALESCE(NEW.email_change_token_new, '');
+  NEW.email_change := COALESCE(NEW.email_change, '');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS tr_auto_confirm_user ON auth.users;
+CREATE TRIGGER tr_auto_confirm_user
+  BEFORE INSERT OR UPDATE ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_auto_confirm_user();
 
 -- 1. CREATE INVITATION
 CREATE OR REPLACE FUNCTION public.create_invitation(

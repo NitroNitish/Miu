@@ -43,10 +43,11 @@ export const normalizeUsername = (username: string): string => {
 /**
  * Deterministic synthetic email mapping for username-only login in Supabase GoTrue
  * Never shown to users, never receives emails.
+ * Uses standard domain format to satisfy GoTrue syntax validation.
  */
 export const usernameToSyntheticEmail = (username: string): string => {
   const normalized = normalizeUsername(username);
-  return `user_${normalized}@internal.miu.app`;
+  return `${normalized}.miu@gmail.com`;
 };
 
 /**
