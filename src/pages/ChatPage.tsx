@@ -24,6 +24,7 @@ export const ChatPage: React.FC = () => {
     editMessage,
     partner,
     setActiveViewOnceMedia,
+    uploadMediaFile,
   } = useChat();
 
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -189,13 +190,35 @@ export const ChatPage: React.FC = () => {
     setToastMessage(type === 'view_once' ? 'Sent View Once photo' : 'Media sent');
   };
 
-  const handleSendVoice = (duration: number) => {
-    sendMessage({
+  const handleSendVoice = async ({
+    blob,
+    url,
+    duration,
+  }: {
+    blob: Blob;
+    url: string;
+    duration: number;
+  }) => {
+    let finalMediaUrl = url;
+
+    if (isConfigured) {
+      try {
+        const uploadedUrl = await uploadMediaFile(blob, 'chat-media');
+        if (uploadedUrl) {
+          finalMediaUrl = uploadedUrl;
+        }
+      } catch (err) {
+        console.warn('Voice storage upload fallback to data URL:', err);
+      }
+    }
+
+    await sendMessage({
       content: `Voice note (${duration}s)`,
       type: 'voice',
+      mediaUrl: finalMediaUrl,
       duration,
     });
-    setToastMessage('Voice message sent');
+    setToastMessage('Voice note sent');
   };
 
   const handleCopy = (text: string) => {

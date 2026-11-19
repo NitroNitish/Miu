@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Mic, Image, Send, X, Trash2, Reply } from 'lucide-react';
+import { Camera, Mic, Image, Send, X, Trash2, Reply, AlertCircle } from 'lucide-react';
 import { AttachmentSheet } from './AttachmentSheet';
 import { Message } from '../../types';
 import { useChat } from '../../context/ChatContext';
@@ -7,7 +7,7 @@ import { useChat } from '../../context/ChatContext';
 interface MessageComposerProps {
   onSendMessage: (text: string) => void;
   onSendMedia: (url: string, type: 'image' | 'video' | 'view_once', caption?: string) => void;
-  onSendVoice: (duration: number) => void;
+  onSendVoice: (audioData: { blob: Blob; url: string; duration: number }) => void;
   replyingTo: Message | null;
   onCancelReply: () => void;
 }
@@ -25,12 +25,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [isAttachmentOpen, setIsAttachmentOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [audioLevels, setAudioLevels] = useState<number[]>([30, 60, 45, 80, 50, 70, 40, 65, 55, 35]);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const recordedSecondsRef = useRef<number>(0);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -41,21 +52,33 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   }, [text]);
 
-  // Voice recording timer
+  // Clean up recording tracks & audio context on unmount
   useEffect(() => {
-    if (isRecording) {
-      setRecordingSeconds(0);
-      timerRef.current = setInterval(() => {
-        setRecordingSeconds((prev) => prev + 1);
-      }, 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setRecordingSeconds(0);
-    }
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      cleanupRecording();
     };
-  }, [isRecording]);
+  }, []);
+
+  const cleanupRecording = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    mediaRecorderRef.current = null;
+  };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -85,18 +108,170 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  const startRecording = () => {
-    setIsRecording(true);
+  // START RECORDING
+  const startRecording = async () => {
+    setMicError(null);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMicError('Audio recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+      recordedSecondsRef.current = 0;
+      setRecordingSeconds(0);
+
+      // Supported MIME type detector
+      const preferredTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac',
+        'audio/ogg;codecs=opus',
+      ];
+      let chosenMime = '';
+      if (typeof MediaRecorder !== 'undefined') {
+        for (const type of preferredTypes) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            chosenMime = type;
+            break;
+          }
+        }
+      }
+
+      const recorder = new MediaRecorder(
+        stream,
+        chosenMime ? { mimeType: chosenMime } : undefined
+      );
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start(100); // 100ms chunks
+
+      setIsRecording(true);
+
+      // Timer counter
+      timerIntervalRef.current = setInterval(() => {
+        recordedSecondsRef.current += 1;
+        setRecordingSeconds(recordedSecondsRef.current);
+      }, 1000);
+
+      // Realtime Audio Visualizer
+      try {
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+
+          audioContextRef.current = audioCtx;
+          analyserRef.current = analyser;
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const updateAudioLevels = () => {
+            if (analyserRef.current) {
+              analyserRef.current.getByteFrequencyData(dataArray);
+              const bars: number[] = [];
+              for (let i = 0; i < 11; i++) {
+                const val = dataArray[i * 2] || 0;
+                const percent = Math.min(100, Math.max(18, (val / 255) * 100));
+                bars.push(percent);
+              }
+              setAudioLevels(bars);
+              animFrameRef.current = requestAnimationFrame(updateAudioLevels);
+            }
+          };
+          updateAudioLevels();
+        }
+      } catch (visErr) {
+        console.warn('Audio visualization not supported:', visErr);
+      }
+    } catch (err: unknown) {
+      console.error('Microphone access error:', err);
+      const isPermissionDenied =
+        err instanceof Error &&
+        (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError');
+      setMicError(
+        isPermissionDenied
+          ? 'Microphone permission denied. Please allow microphone access.'
+          : 'Could not access microphone.'
+      );
+      setTimeout(() => setMicError(null), 4000);
+      cleanupRecording();
+      setIsRecording(false);
+    }
   };
 
+  // CANCEL RECORDING
   const cancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = null;
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // ignore
+      }
+    }
+    cleanupRecording();
     setIsRecording(false);
+    setRecordingSeconds(0);
   };
 
+  // SEND RECORDING
   const sendRecording = () => {
-    const finalDuration = Math.max(recordingSeconds, 2);
-    setIsRecording(false);
-    onSendVoice(finalDuration);
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      cancelRecording();
+      return;
+    }
+
+    const duration = Math.max(1, recordedSecondsRef.current || recordingSeconds);
+
+    recorder.onstop = () => {
+      const mime = recorder.mimeType || 'audio/webm';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mime });
+
+      // Convert blob to base64 Data URL for zero-dependency universal playback
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        onSendVoice({
+          blob: audioBlob,
+          url: dataUrl,
+          duration,
+        });
+      };
+      reader.readAsDataURL(audioBlob);
+
+      cleanupRecording();
+      setIsRecording(false);
+      setRecordingSeconds(0);
+    };
+
+    try {
+      recorder.stop();
+    } catch {
+      cleanupRecording();
+      setIsRecording(false);
+    }
   };
 
   const formatRecordTime = (totalSeconds: number) => {
@@ -118,7 +293,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       return;
     }
 
-    // Fallback to base64 DataURL
+    // Local Base64 fallback if storage not configured
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -131,13 +306,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const hasText = text.trim().length > 0;
 
   return (
-    <footer className="shrink-0 w-full bg-[#000000] border-t border-[#1A1A1A] z-50 box-border pt-1 pb-[max(8px,env(safe-area-inset-bottom,8px))]">
-      {/* Hidden file inputs for Camera and Gallery */}
+    <div className="w-full bg-[#121212] border-t border-[#262626] relative z-20 select-none">
+      {/* Hidden file inputs for Camera and Photo Gallery */}
       <input
         type="file"
         ref={cameraInputRef}
         onChange={handleMediaUpload}
-        accept="image/*"
+        accept="image/*,video/*"
         capture="environment"
         className="hidden"
       />
@@ -149,45 +324,51 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         className="hidden"
       />
 
-      {/* Replying banner */}
+      {/* Mic Error Notice */}
+      {micError && (
+        <div className="px-4 py-2 bg-red-950/80 border-b border-red-800 text-red-300 text-xs flex items-center gap-2 animate-fade-in">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{micError}</span>
+        </div>
+      )}
+
+      {/* Replying Banner */}
       {replyingTo && (
-        <div className="flex items-center justify-between px-3 py-1.5 bg-[#1A1A1A] border-b border-[#262626] text-xs">
-          <div className="flex items-center gap-2 overflow-hidden pr-2">
-            <Reply className="w-3.5 h-3.5 text-[#D91A8E] shrink-0" />
-            <div className="truncate">
-              <span className="font-semibold text-neutral-300">
-                Replying to {replyingTo.sender === 'user' ? 'yourself' : partner.name}:
-              </span>{' '}
-              <span className="text-neutral-500 truncate">
-                {replyingTo.content || 'Media message'}
-              </span>
-            </div>
+        <div className="flex items-center justify-between px-4 py-2 bg-[#1A1A1A] border-b border-[#262626] text-xs">
+          <div className="flex items-center gap-2 text-neutral-300 truncate">
+            <Reply className="w-3.5 h-3.5 text-[#3797F0] shrink-0" />
+            <span className="text-[#8E8E8E] shrink-0">
+              Replying to {replyingTo.sender === 'user' ? 'yourself' : partner.name}:
+            </span>
+            <span className="truncate italic text-white/90">"{replyingTo.content}"</span>
           </div>
           <button
             onClick={onCancelReply}
-            className="p-1 rounded-full text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Main Composer Row - Comfortably sized, sleek layout with Camera, Message Pill, Mic & Gallery */}
+      {/* Main Composer Row */}
       <div className="w-full px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2.5 max-w-full box-border">
         {isRecording ? (
-          /* Voice Recording Mode UI */
+          /* Live Voice Recording UI */
           <div className="flex-1 min-w-0 min-h-[44px] sm:min-h-[48px] flex items-center justify-between bg-[#262626] rounded-full px-4 py-2 animate-fade-in">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
               <span className="text-sm font-mono font-medium text-white shrink-0">
                 {formatRecordTime(recordingSeconds)}
               </span>
-              <div className="hidden xs:flex items-center gap-0.5 h-4 overflow-hidden">
-                {[40, 80, 50, 90, 70, 30, 60, 100, 45, 75, 35].map((val, idx) => (
+
+              {/* Dynamic Live Audio Level Waveform */}
+              <div className="flex items-center gap-[3px] h-5 overflow-hidden ml-1">
+                {audioLevels.map((val, idx) => (
                   <span
                     key={idx}
                     style={{ height: `${val}%` }}
-                    className="w-[2px] bg-red-500/80 rounded-full animate-pulse"
+                    className="w-[2.5px] bg-[#B6A4DC] rounded-full transition-all duration-75"
                   />
                 ))}
               </div>
@@ -195,15 +376,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
             <div className="flex items-center gap-2 shrink-0">
               <button
+                type="button"
                 onClick={cancelRecording}
-                className="p-1.5 text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
+                className="p-2 text-neutral-400 hover:text-red-400 active:scale-95 transition-all cursor-pointer rounded-full hover:bg-white/10"
                 title="Cancel recording"
               >
                 <Trash2 className="w-4.5 h-4.5" />
               </button>
               <button
+                type="button"
                 onClick={sendRecording}
-                className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#D91A8E] to-[#6366F1] text-white text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer flex items-center gap-1"
+                className="px-4 py-1.5 rounded-full bg-[#B6A4DC] text-[#111214] font-bold text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Send</span>
@@ -213,7 +396,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         ) : (
           /* Normal Composer Row */
           <>
-            {/* Left Camera Button: Circular blue button (comfortable 42px - 44px) */}
+            {/* Left Camera Button */}
             <button
               type="button"
               onClick={() => cameraInputRef.current?.click()}
@@ -223,7 +406,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               <Camera className="w-[21px] h-[21px] sm:w-[22px] sm:h-[22px] stroke-[2]" />
             </button>
 
-            {/* Middle Input Pill: Comfortably sized with 16px-17px font */}
+            {/* Middle Input Pill */}
             <div className="flex-1 min-w-0 min-h-[44px] sm:min-h-[48px] flex items-center bg-[#262626] rounded-full pl-4 pr-2.5 py-1 sm:py-1.5 border border-transparent focus-within:border-[#383838] transition-colors">
               <textarea
                 ref={textareaRef}
@@ -247,13 +430,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5 sm:gap-2.5 text-white shrink-0 ml-1.5">
-                  {/* Microphone */}
+                  {/* Microphone (Start Voice Recording) */}
                   <button
                     type="button"
                     onClick={startRecording}
-                    aria-label="Voice message"
+                    aria-label="Record voice note"
                     className="p-1 sm:p-1.5 hover:opacity-80 active:scale-95 transition-all cursor-pointer text-white"
-                    title="Voice message"
+                    title="Hold or tap to record voice note"
                   >
                     <Mic className="w-[21px] h-[21px] sm:w-[22px] sm:h-[22px] stroke-[1.8]" />
                   </button>
@@ -281,6 +464,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         onClose={() => setIsAttachmentOpen(false)}
         onSendMedia={onSendMedia}
       />
-    </footer>
+    </div>
   );
 };
+
+export default MessageComposer;

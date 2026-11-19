@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
 import { BottomNavigation } from './components/navigation/BottomNavigation';
 import { Sidebar } from './components/navigation/Sidebar';
+import { SwipeNavigation } from './components/navigation/SwipeNavigation';
 
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
@@ -48,10 +49,10 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Desktop Navigation Sidebar */}
       <Sidebar />
 
-      {/* Main App Content Viewport */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main App Content Viewport with Finger Swipe Navigation */}
+      <SwipeNavigation>
         {children}
-      </div>
+      </SwipeNavigation>
 
       {/* Mobile Fixed Bottom Navigation */}
       {!hideBottomNavOnMobile && <BottomNavigation />}

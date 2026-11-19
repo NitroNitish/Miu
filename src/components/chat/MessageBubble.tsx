@@ -253,7 +253,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           {/* VOICE MESSAGE */}
           {message.type === 'voice' && (
             <div className="py-0.5">
-              <VoiceMessage duration={message.duration || 18} isOutgoing={isOutgoing} />
+              <VoiceMessage
+                audioUrl={
+                  message.mediaUrl ||
+                  (message.content.startsWith('data:audio') ? message.content : undefined)
+                }
+                duration={message.duration || 18}
+                isOutgoing={isOutgoing}
+                messageId={message.id}
+              />
             </div>
           )}
 
