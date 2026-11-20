@@ -11,6 +11,7 @@ import {
 } from '../lib/supabase';
 import { Profile, Connection, PartnerProfile } from '../types';
 import { initialPartnerProfile, initialUserProfile } from '../data/mockData';
+import { processProfilePicture } from '../utils/imageUtils';
 
 interface AuthContextType {
   user: Profile | null;
@@ -42,6 +43,12 @@ interface AuthContextType {
   disconnectConnection: () => Promise<{ success: boolean; error?: string }>;
   refreshConnection: () => Promise<void>;
   updatePartnerStatus: (status: 'online' | 'offline', lastActive?: string) => void;
+  uploadAvatar: (file: File | Blob) => Promise<{ success: boolean; url?: string; error?: string }>;
+  updateProfile: (updates: {
+    displayName?: string;
+    bio?: string;
+    avatarUrl?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -391,6 +398,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!rpcErr && rpcData?.success) {
         // Automatically sign in now that user is in auth.users
         const loginRes = await login(cleanUsername, password);
+        if (loginRes.success && avatarUrl) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: avatarUrl })
+            .eq('normalized_username', normalized);
+          setUser((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev, avatar_url: avatarUrl };
+            localStorage.setItem('miu_auth_user', JSON.stringify(updated));
+            return updated;
+          });
+        }
         return loginRes;
       }
 
@@ -638,6 +657,113 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Upload and set user profile avatar
+  const uploadAvatar = useCallback(
+    async (file: File | Blob): Promise<{ success: boolean; url?: string; error?: string }> => {
+      if (!user) return { success: false, error: 'User not authenticated' };
+
+      try {
+        const { blob, dataUrl } = await processProfilePicture(file, 512, 0.88);
+        let finalUrl = dataUrl;
+
+        if (isSupabaseConfigured) {
+          const path = `avatars/${user.id}/${Date.now()}.jpg`;
+          const { error: uploadErr } = await supabase.storage.from('chat-media').upload(path, blob, {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
+
+          if (!uploadErr) {
+            const { data } = supabase.storage.from('chat-media').getPublicUrl(path);
+            if (data?.publicUrl) {
+              finalUrl = data.publicUrl;
+            }
+          } else {
+            console.warn('Storage upload fallback to optimized data URL:', uploadErr);
+          }
+
+          const { error: dbErr } = await supabase
+            .from('profiles')
+            .update({ avatar_url: finalUrl, updated_at: new Date().toISOString() })
+            .eq('id', user.id);
+
+          if (dbErr) {
+            console.error('Error updating profile avatar in database:', dbErr);
+          }
+        }
+
+        const updatedUser: Profile = {
+          ...user,
+          avatar_url: finalUrl,
+          updated_at: new Date().toISOString(),
+        };
+        setUser(updatedUser);
+        localStorage.setItem('miu_auth_user', JSON.stringify(updatedUser));
+
+        return { success: true, url: finalUrl };
+      } catch (err: unknown) {
+        console.error('Failed to process avatar:', err);
+        return { success: false, error: 'Failed to process avatar image.' };
+      }
+    },
+    [user]
+  );
+
+  // Update profile details (Display name, Bio, Avatar URL)
+  const updateProfile = useCallback(
+    async ({
+      displayName,
+      bio,
+      avatarUrl,
+    }: {
+      displayName?: string;
+      bio?: string;
+      avatarUrl?: string;
+    }): Promise<{ success: boolean; error?: string }> => {
+      if (!user) return { success: false, error: 'User not authenticated' };
+
+      const newDisplayName = displayName !== undefined ? displayName.trim() : user.display_name;
+      const newBio = bio !== undefined ? bio.trim() : user.bio;
+      const newAvatar = avatarUrl !== undefined ? avatarUrl : user.avatar_url;
+
+      const updatedUser: Profile = {
+        ...user,
+        display_name: newDisplayName || user.username,
+        bio: newBio,
+        avatar_url: newAvatar,
+        updated_at: new Date().toISOString(),
+      };
+
+      setUser(updatedUser);
+      localStorage.setItem('miu_auth_user', JSON.stringify(updatedUser));
+
+      if (isSupabaseConfigured) {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              display_name: newDisplayName || user.username,
+              bio: newBio,
+              avatar_url: newAvatar,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', user.id);
+
+          if (error) {
+            console.error('Error updating profile in Supabase:', error);
+            return { success: false, error: error.message };
+          }
+        } catch (err) {
+          console.error('Failed to update profile:', err);
+          return { success: false, error: 'Database update failed.' };
+        }
+      }
+
+      return { success: true };
+    },
+    [user]
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -655,6 +781,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         disconnectConnection,
         refreshConnection,
         updatePartnerStatus,
+        uploadAvatar,
+        updateProfile,
       }}
     >
       {children}

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { Sun, Moon, AlertCircle, User, Lock, Sparkles } from 'lucide-react';
+import { Sun, Moon, AlertCircle, User, Lock, Sparkles, Camera } from 'lucide-react';
+import { processProfilePicture } from '../utils/imageUtils';
 
 export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
@@ -16,6 +17,19 @@ export const AuthPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const avatarPickerRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { dataUrl } = await processProfilePicture(file, 256, 0.85);
+      setAvatarPreview(dataUrl);
+    } catch {
+      // ignore
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +48,8 @@ export const AuthPage: React.FC = () => {
       const res = await register(
         username,
         password,
-        displayName.trim() || username.trim()
+        displayName.trim() || username.trim(),
+        avatarPreview || undefined
       );
       setIsLoading(false);
       if (res.success) {
@@ -126,6 +141,32 @@ export const AuthPage: React.FC = () => {
           )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-3.5">
+            {/* Avatar selector in register mode */}
+            {mode === 'register' && (
+              <div className="flex flex-col items-center justify-center gap-1.5 py-1 animate-fade-in">
+                <div
+                  onClick={() => avatarPickerRef.current?.click()}
+                  className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-dashed border-[#A99BCB] dark:border-[#B6A4DC] flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity bg-white/50 dark:bg-black/20 group shadow-xs"
+                >
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-neutral-400 group-hover:text-[#A99BCB]">
+                      <Camera className="w-5 h-5 mb-0.5" />
+                      <span className="text-[9px] font-medium leading-none">Photo</span>
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  ref={avatarPickerRef}
+                  onChange={handleAvatarSelect}
+                  accept="image/*"
+                  className="hidden"
+                />
+              </div>
+            )}
+
             {/* Username field (No email asked) */}
             <label className="flex items-center gap-[12px] h-[54px] px-[16px] bg-white dark:bg-[#191A1D] border border-[#EAE5DE] dark:border-[#303136] rounded-[16px] transition-colors focus-within:border-[#A99BCB] dark:focus-within:border-[#B6A4DC]">
               <span className="text-neutral-500 text-sm font-semibold select-none">@</span>

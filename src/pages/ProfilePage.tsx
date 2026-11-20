@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Sun,
   Moon,
@@ -35,9 +35,22 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { themeMode, setThemeMode } = useTheme();
   const { partner } = useChat();
-  const { user: authUser, connection, createInvitation, disconnectConnection, logout } = useAuth();
+  const {
+    user: authUser,
+    connection,
+    createInvitation,
+    disconnectConnection,
+    logout,
+    uploadAvatar,
+    updateProfile,
+  } = useAuth();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Avatar upload & Profile editing states
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   // Invitation Modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -57,6 +70,25 @@ export const ProfilePage: React.FC = () => {
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [editName, setEditName] = useState(authUser?.display_name || authUser?.username || '');
   const [editBio, setEditBio] = useState(authUser?.bio || 'Private by design.');
+
+  const handleAvatarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    const res = await uploadAvatar(file);
+    setIsUploadingAvatar(false);
+
+    if (res.success) {
+      setToastMessage('Profile photo updated successfully!');
+    } else {
+      setToastMessage(res.error || 'Failed to update photo');
+    }
+
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
 
   const handleClearCache = () => {
     setCacheSize('0.0 KB');
@@ -131,12 +163,36 @@ export const ProfilePage: React.FC = () => {
       <main className="flex-1 max-w-xl w-full mx-auto p-4 sm:p-6 space-y-6">
         {/* Profile Card Section */}
         <div className="flex flex-col items-center text-center p-6 bg-[#FFFFFF] dark:bg-[#191A1D] border border-[#EEEEEC] dark:border-[#303136] rounded-2xl shadow-xs animate-fade-in relative">
-          <div className="relative mb-3">
+          <div className="relative mb-3 group/avatar">
             <Avatar
               src={authUser?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80'}
               name={authUser?.display_name || authUser?.username || 'You'}
               size="xl"
               showOnline
+            />
+
+            {/* Camera icon button overlay to change photo directly */}
+            <button
+              type="button"
+              onClick={() => avatarFileInputRef.current?.click()}
+              disabled={isUploadingAvatar}
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#1A1A1A] text-white border-2 border-[#FFFFFF] dark:border-[#191A1D] shadow-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all cursor-pointer group-hover/avatar:bg-[#A99BCB] dark:group-hover/avatar:bg-[#B6A4DC] dark:group-hover/avatar:text-[#111214]"
+              title="Change profile photo"
+              aria-label="Change profile photo"
+            >
+              {isUploadingAvatar ? (
+                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera className="w-4 h-4" />
+              )}
+            </button>
+
+            <input
+              type="file"
+              ref={avatarFileInputRef}
+              onChange={handleAvatarFileSelect}
+              accept="image/*"
+              className="hidden"
             />
           </div>
 
@@ -528,9 +584,59 @@ export const ProfilePage: React.FC = () => {
       <Modal
         isOpen={isEditProfileOpen}
         onClose={() => setIsEditProfileOpen(false)}
-        title="Edit Partner Profile"
+        title="Edit Profile"
       >
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* Avatar Preview & Actions */}
+          <div className="flex flex-col items-center justify-center gap-2 pb-1">
+            <div className="relative">
+              <Avatar
+                src={authUser?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80'}
+                name={editName || authUser?.username || 'You'}
+                size="lg"
+              />
+              <button
+                type="button"
+                onClick={() => avatarFileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="absolute -bottom-1 -right-1 p-1.5 rounded-full bg-[#1A1A1A] text-white border-2 border-white dark:border-[#191A1D] shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                title="Change photo"
+              >
+                {isUploadingAvatar ? (
+                  <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Camera className="w-3 h-3" />
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => avatarFileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="text-xs font-semibold text-[#A99BCB] dark:text-[#B6A4DC] hover:underline cursor-pointer"
+              >
+                {isUploadingAvatar ? 'Uploading...' : 'Change Photo'}
+              </button>
+              {authUser?.avatar_url && (
+                <>
+                  <span className="text-neutral-400 text-xs">•</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await updateProfile({ avatarUrl: '' });
+                      setToastMessage('Profile photo removed');
+                    }}
+                    className="text-xs text-red-400 hover:underline cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="text-[11px] font-semibold text-neutral-500 uppercase">
               Display Name
@@ -539,6 +645,7 @@ export const ProfilePage: React.FC = () => {
               type="text"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
+              placeholder="Your display name"
               className="w-full mt-1 px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-[#171717] dark:text-[#F5F5F5] focus:outline-none focus:border-[#A99BCB]"
             />
           </div>
@@ -551,18 +658,33 @@ export const ProfilePage: React.FC = () => {
               type="text"
               value={editBio}
               onChange={(e) => setEditBio(e.target.value)}
+              placeholder="Bio or status"
               className="w-full mt-1 px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-[#171717] dark:text-[#F5F5F5] focus:outline-none focus:border-[#A99BCB]"
             />
           </div>
 
           <button
-            onClick={() => {
-              setIsEditProfileOpen(false);
-              setToastMessage('Profile details saved');
+            onClick={async () => {
+              setIsSavingProfile(true);
+              const res = await updateProfile({
+                displayName: editName,
+                bio: editBio,
+              });
+              setIsSavingProfile(false);
+              if (res.success) {
+                setIsEditProfileOpen(false);
+                setToastMessage('Profile details saved');
+              } else {
+                setToastMessage(res.error || 'Failed to save changes');
+              }
             }}
-            className="w-full mt-2 py-2 rounded-xl bg-[#202124] text-white dark:bg-[#B6A4DC] dark:text-[#111214] text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
+            disabled={isSavingProfile}
+            className="w-full mt-2 py-2 rounded-xl bg-[#202124] text-white dark:bg-[#B6A4DC] dark:text-[#111214] text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
           >
-            Save Changes
+            {isSavingProfile ? (
+              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : null}
+            <span>{isSavingProfile ? 'Saving...' : 'Save Changes'}</span>
           </button>
         </div>
       </Modal>
