@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Reply, Trash2, Copy, Smile, Eye, EyeOff, Sparkles, Ban, Edit3 } from 'lucide-react';
+import { Reply, Trash2, Copy, Smile, Eye, EyeOff, Sparkles, Ban, Edit3, Plus } from 'lucide-react';
 import { Message } from '../../types';
 import { VoiceMessage } from './VoiceMessage';
+import { EmojiLibraryModal } from './EmojiLibraryModal';
 import { useChat } from '../../context/ChatContext';
 
 interface MessageBubbleProps {
@@ -36,6 +37,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const { deleteMessage, deleteForEveryone, addReaction, partner } = useChat();
   const [showMenu, setShowMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showFullEmojiLibrary, setShowFullEmojiLibrary] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cancel long press if user begins pulling timestamps
@@ -139,9 +141,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`group relative flex flex-col ${spacingClass} ${
-        isOutgoing ? 'items-end' : 'items-start'
-      } w-full select-none`}
+      className={`group relative flex flex-col ${spacingClass} ${isOutgoing ? 'items-end' : 'items-start'
+        } w-full select-none`}
       style={{
         transform: `translateX(-${dragOffset}px)`,
         transition: isDragging ? 'none' : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
@@ -157,11 +158,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Reply target banner if replying to a message */}
       {message.replyTo && (
         <div
-          className={`text-[12px] px-3.5 py-1.5 mb-1 rounded-t-xl max-w-[300px] sm:max-w-xs truncate border-l-2 flex items-center gap-1.5 opacity-80 ${
-            isOutgoing
+          className={`text-[12px] px-3.5 py-1.5 mb-1 rounded-t-xl max-w-[300px] sm:max-w-xs truncate border-l-2 flex items-center gap-1.5 opacity-80 ${isOutgoing
               ? 'bg-[#1A1A1A] border-[#D91A8E] text-neutral-300 mr-1'
               : 'bg-[#1A1A1A] border-neutral-500 text-neutral-300 ml-10'
-          }`}
+            }`}
         >
           <Reply className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
           <span className="font-semibold text-white">
@@ -192,15 +192,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* Main Message Bubble (slightly bigger: 16px text, generous padding) */}
         <div
-          className={`relative transition-all shadow-xs ${getRadiusClasses()} ${
-            isOutgoing
+          className={`relative transition-all shadow-xs ${getRadiusClasses()} ${isOutgoing
               ? `${getOutgoingGradient()} text-white`
               : 'bg-[#262626] text-white'
-          } ${
-            message.type === 'image' || message.type === 'doodle'
+            } ${message.type === 'image' || message.type === 'doodle'
               ? 'p-1.5'
               : 'px-4.5 py-3'
-          }`}
+            }`}
         >
           {/* TEXT MESSAGE */}
           {message.type === 'text' && (
@@ -269,18 +267,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           {message.type === 'view_once' && (
             <div
               onClick={handleBubbleClick}
-              className={`flex items-center gap-3 py-1 px-1.5 rounded-xl transition-all ${
-                message.isViewed
+              className={`flex items-center gap-3 py-1 px-1.5 rounded-xl transition-all ${message.isViewed
                   ? 'opacity-60 cursor-default'
                   : 'cursor-pointer hover:opacity-90 active:scale-[0.98]'
-              }`}
+                }`}
             >
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${
-                  message.isViewed
+                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 border ${message.isViewed
                     ? 'border-neutral-500 bg-transparent text-neutral-400'
                     : 'border-[#D91A8E] bg-[#D91A8E]/15 text-[#D91A8E]'
-                }`}
+                  }`}
               >
                 {message.isViewed ? (
                   <EyeOff className="w-4.5 h-4.5" />
@@ -313,9 +309,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Floating Reaction Pill */}
       {message.reactions && Object.keys(message.reactions).length > 0 && (
         <div
-          className={`flex items-center gap-1 -mt-2.5 z-10 animate-fade-in ${
-            isOutgoing ? 'mr-1 justify-end' : 'ml-10 justify-start'
-          }`}
+          className={`flex items-center gap-1 -mt-2.5 z-10 animate-fade-in ${isOutgoing ? 'mr-1 justify-end' : 'ml-10 justify-start'
+            }`}
         >
           {Object.entries(message.reactions).map(([emoji, count]) => (
             <button
@@ -349,9 +344,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       {/* Hover Quick Actions on Desktop */}
       <div
-        className={`opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute top-0 ${
-          isOutgoing ? '-left-22' : '-right-22'
-        } flex items-center gap-0.5 bg-[#1A1A1A] border border-[#2E2E2E] rounded-full px-2 py-1 shadow-lg`}
+        className={`opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute top-0 ${isOutgoing ? '-left-22' : '-right-22'
+          } flex items-center gap-0.5 bg-[#1A1A1A] border border-[#2E2E2E] rounded-full px-2 py-1 shadow-lg`}
       >
         <button
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -379,9 +373,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Floating Reaction Picker */}
       {showEmojiPicker && (
         <div
-          className={`absolute z-30 -top-12 ${
-            isOutgoing ? 'right-0' : 'left-10'
-          } flex items-center gap-2 p-2 bg-[#1A1A1A]/95 backdrop-blur-md border border-[#2E2E2E] rounded-full shadow-2xl animate-slide-up`}
+          className={`absolute z-30 -top-12 ${isOutgoing ? 'right-0' : 'left-10'
+            } flex items-center gap-1.5 p-1.5 bg-[#1A1A1A]/95 backdrop-blur-md border border-[#2E2E2E] rounded-full shadow-2xl animate-slide-up`}
         >
           {quickReactions.map((emoji) => (
             <button
@@ -395,6 +388,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               {emoji}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              setShowEmojiPicker(false);
+              setShowFullEmojiLibrary(true);
+            }}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-[#A99BCB]/25 hover:text-[#A99BCB] dark:hover:text-[#B6A4DC] text-neutral-300 flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer shadow-xs ml-0.5"
+            title="Whole emoji library"
+            aria-label="Whole emoji library"
+          >
+            <Plus className="w-4 h-4 stroke-[2.2]" />
+          </button>
         </div>
       )}
 
@@ -407,7 +412,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           />
           <div className="relative z-10 w-68 bg-[#1A1A1A] border border-[#2E2E2E] rounded-2xl shadow-2xl overflow-hidden p-2.5 animate-slide-up">
             {/* Quick Emoji Reaction Row */}
-            <div className="flex items-center justify-around py-2.5 border-b border-[#2E2E2E] mb-1.5">
+            <div className="flex items-center justify-around py-2.5 border-b border-[#2E2E2E] mb-1.5 px-1">
               {quickReactions.map((emoji) => (
                 <button
                   key={emoji}
@@ -420,6 +425,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   {emoji}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMenu(false);
+                  setShowFullEmojiLibrary(true);
+                }}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-[#A99BCB]/25 hover:text-[#A99BCB] dark:hover:text-[#B6A4DC] text-neutral-300 flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer shadow-xs ml-1"
+                title="Whole emoji library"
+                aria-label="Whole emoji library"
+              >
+                <Plus className="w-4 h-4 stroke-[2.2]" />
+              </button>
             </div>
 
             <button
@@ -490,6 +507,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         </div>
       )}
+
+      {/* Whole Emoji Library Modal */}
+      <EmojiLibraryModal
+        isOpen={showFullEmojiLibrary}
+        onClose={() => setShowFullEmojiLibrary(false)}
+        onSelectEmoji={(emoji) => addReaction(message.id, emoji)}
+        messagePreview={message.type === 'text' ? message.content : undefined}
+      />
     </div>
   );
 };
