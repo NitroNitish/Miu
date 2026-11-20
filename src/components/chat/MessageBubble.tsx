@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Reply, Trash2, Copy, Smile, Eye, EyeOff, Sparkles, Ban, Edit3, Plus } from 'lucide-react';
 import { Message } from '../../types';
 import { VoiceMessage } from './VoiceMessage';
@@ -39,6 +40,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showFullEmojiLibrary, setShowFullEmojiLibrary] = useState(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close context menu on Escape key
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowMenu(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showMenu]);
 
   // Cancel long press if user begins pulling timestamps
   React.useEffect(() => {
@@ -403,110 +419,139 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </div>
       )}
 
-      {/* Context Action Menu Modal */}
-      {showMenu && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Context Action Menu Modal (Portaled directly to document.body to break free of transforms & stacking contexts) */}
+      {showMenu &&
+        createPortal(
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-200"
-            onClick={() => setShowMenu(false)}
-          />
-          <div className="relative z-10 w-68 bg-[#1A1A1A] border border-[#2E2E2E] rounded-2xl shadow-2xl overflow-hidden p-2.5 animate-slide-up">
-            {/* Quick Emoji Reaction Row */}
-            <div className="flex items-center justify-around py-2.5 border-b border-[#2E2E2E] mb-1.5 px-1">
-              {quickReactions.map((emoji) => (
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 select-none"
+            role="dialog"
+            aria-modal="true"
+          >
+            {/* Fullscreen Backdrop: Intercepts all clicks & touches so underlying elements never trigger */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-200"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(false);
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setShowMenu(false);
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+            />
+
+            {/* Menu Popup Surface */}
+            <div
+              ref={menuRef}
+              className="relative z-10 w-68 bg-[#1A1A1A] border border-[#2E2E2E] rounded-2xl shadow-2xl overflow-hidden p-2.5 animate-slide-up"
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {/* Quick Emoji Reaction Row */}
+              <div className="flex items-center justify-around py-2.5 border-b border-[#2E2E2E] mb-1.5 px-1">
+                {quickReactions.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => {
+                      addReaction(message.id, emoji);
+                      setShowMenu(false);
+                    }}
+                    className="text-2xl p-1 hover:scale-135 active:scale-90 transition-all duration-150 cursor-pointer"
+                  >
+                    {emoji}
+                  </button>
+                ))}
                 <button
-                  key={emoji}
+                  type="button"
                   onClick={() => {
-                    addReaction(message.id, emoji);
+                    setShowMenu(false);
+                    setShowFullEmojiLibrary(true);
+                  }}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-[#A99BCB]/25 hover:text-[#A99BCB] dark:hover:text-[#B6A4DC] text-neutral-300 flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer shadow-xs ml-1"
+                  title="Whole emoji library"
+                  aria-label="Whole emoji library"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.2]" />
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  onReply(message);
+                  setShowMenu(false);
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
+              >
+                <Reply className="w-4 h-4 text-neutral-400" />
+                Reply
+              </button>
+
+              {message.type === 'text' && (
+                <button
+                  onClick={() => {
+                    onCopy(message.content);
                     setShowMenu(false);
                   }}
-                  className="text-2xl p-1 hover:scale-135 active:scale-90 transition-all duration-150 cursor-pointer"
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
                 >
-                  {emoji}
+                  <Copy className="w-4 h-4 text-neutral-400" />
+                  Copy text
                 </button>
-              ))}
+              )}
+
+              {/* Edit message for outgoing text */}
+              {isOutgoing && message.type === 'text' && onEdit && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    onEdit(message);
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
+                >
+                  <Edit3 className="w-4 h-4 text-neutral-400" />
+                  Edit message
+                </button>
+              )}
+
+              <div className="my-1.5 border-t border-[#2E2E2E]" />
+
+              {/* Delete for everyone (outgoing) */}
+              {isOutgoing && (
+                <button
+                  onClick={() => {
+                    deleteForEveryone(message.id);
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-red-400 hover:bg-red-950/30 rounded-xl transition-colors text-left cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete for everyone
+                </button>
+              )}
+
+              {/* Delete for me */}
               <button
-                type="button"
                 onClick={() => {
+                  deleteMessage(message.id);
                   setShowMenu(false);
-                  setShowFullEmojiLibrary(true);
                 }}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-[#A99BCB]/25 hover:text-[#A99BCB] dark:hover:text-[#B6A4DC] text-neutral-300 flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer shadow-xs ml-1"
-                title="Whole emoji library"
-                aria-label="Whole emoji library"
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-400 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
               >
-                <Plus className="w-4 h-4 stroke-[2.2]" />
+                <Trash2 className="w-4 h-4 opacity-60" />
+                Delete for me
               </button>
             </div>
-
-            <button
-              onClick={() => {
-                onReply(message);
-                setShowMenu(false);
-              }}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
-            >
-              <Reply className="w-4 h-4 text-neutral-400" />
-              Reply
-            </button>
-
-            {message.type === 'text' && (
-              <button
-                onClick={() => {
-                  onCopy(message.content);
-                  setShowMenu(false);
-                }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
-              >
-                <Copy className="w-4 h-4 text-neutral-400" />
-                Copy text
-              </button>
-            )}
-
-            {/* Edit message for outgoing text */}
-            {isOutgoing && message.type === 'text' && onEdit && (
-              <button
-                onClick={() => {
-                  setShowMenu(false);
-                  onEdit(message);
-                }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-200 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
-              >
-                <Edit3 className="w-4 h-4 text-neutral-400" />
-                Edit message
-              </button>
-            )}
-
-            <div className="my-1.5 border-t border-[#2E2E2E]" />
-
-            {/* Delete for everyone (outgoing) */}
-            {isOutgoing && (
-              <button
-                onClick={() => {
-                  deleteForEveryone(message.id);
-                  setShowMenu(false);
-                }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-red-400 hover:bg-red-950/30 rounded-xl transition-colors text-left cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete for everyone
-              </button>
-            )}
-
-            {/* Delete for me */}
-            <button
-              onClick={() => {
-                deleteMessage(message.id);
-                setShowMenu(false);
-              }}
-              className="w-full flex items-center gap-3 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-neutral-400 hover:bg-[#262626] rounded-xl transition-colors text-left cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4 opacity-60" />
-              Delete for me
-            </button>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Whole Emoji Library Modal */}
       <EmojiLibraryModal

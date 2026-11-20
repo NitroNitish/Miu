@@ -108,8 +108,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (status === 'online'
           ? 'Active now'
           : prev.status === 'online'
-          ? 'Offline'
-          : prev.lastActive || 'Offline');
+            ? 'Offline'
+            : prev.lastActive || 'Offline');
       if (prev.status === status && prev.lastActive === newLastActive) return prev;
       return {
         ...prev,

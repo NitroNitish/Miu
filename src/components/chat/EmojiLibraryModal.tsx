@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, X, Sparkles, Heart, Smile, ThumbsUp, PartyPopper, Coffee, Flame } from 'lucide-react';
 
 export interface EmojiData {
@@ -350,16 +351,30 @@ export const EmojiLibraryModal: React.FC<EmojiLibraryModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 select-none">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 select-none">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity animate-fade-in"
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onClose();
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
       />
 
       {/* Modal / Bottom Sheet Card */}
-      <div className="relative z-10 w-full max-w-[440px] max-h-[82vh] h-[520px] bg-[#191A1D] border border-[#303136] rounded-t-[28px] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+      <div
+        className="relative z-10 w-full max-w-[440px] max-h-[82vh] h-[520px] bg-[#191A1D] border border-[#303136] rounded-t-[28px] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slide-up"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
         {/* Top Header */}
         <div className="px-4 pt-3.5 pb-2 border-b border-[#28292E] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -538,7 +553,8 @@ export const EmojiLibraryModal: React.FC<EmojiLibraryModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
