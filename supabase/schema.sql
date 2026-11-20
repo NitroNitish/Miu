@@ -103,6 +103,8 @@ CREATE TABLE IF NOT EXISTS public.messages (
   viewed_at TIMESTAMPTZ,
   deleted_for_everyone BOOLEAN NOT NULL DEFAULT false,
   deleted_for_users UUID[] NOT NULL DEFAULT '{}',
+  delivered_at TIMESTAMPTZ,
+  seen_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   edited_at TIMESTAMPTZ,
   deleted_at TIMESTAMPTZ

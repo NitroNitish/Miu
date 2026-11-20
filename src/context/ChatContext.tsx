@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Message, PartnerProfile, UserProfile, MemoryItem, DailyQuestion } from '../types';
 import { initialMessages, initialPartnerProfile, initialUserProfile, initialMemories, initialDailyQuestions } from '../data/mockData';
 import { useAuth } from './AuthContext';
@@ -43,12 +43,13 @@ interface ChatContextType {
   setActiveViewOnceMedia: (media: { messageId: string; url: string } | null) => void;
   broadcastTyping: (isTyping: boolean) => void;
   uploadMediaFile: (file: File | Blob, bucket?: 'chat-media' | 'voice-messages' | 'memories') => Promise<string | null>;
+  markChatAsSeen: () => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user: authUser, connection, partner: authPartner } = useAuth();
+  const { user: authUser, connection, partner: authPartner, updatePartnerStatus } = useAuth();
 
   // Dual Retention Rule: If user is second participant (user_two_id), do not persist chat in localStorage
   const isSecondParticipant = connection && authUser && connection.user_two_id === authUser.id;
@@ -72,7 +73,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(false);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  
+  // Unread count is reactively calculated from unseen incoming partner messages
+  const unreadCount = useMemo(() => {
+    return messages.filter((m) => m.sender === 'partner' && m.status !== 'seen').length;
+  }, [messages]);
 
   const [memories, setMemories] = useState<MemoryItem[]>(() => {
     const saved = localStorage.getItem('miu_memories');
@@ -229,13 +234,59 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
       .subscribe();
 
-    // 3. Setup Broadcast & Presence Channel (Typing, Online status)
+    const partnerId = connection
+      ? connection.user_one_id === authUser.id
+        ? connection.user_two_id
+        : connection.user_one_id
+      : null;
+
+    // Helper to evaluate partner online presence
+    const checkPartnerInPresence = () => {
+      if (!presenceChannelRef.current || !partnerId) return;
+      const state = presenceChannelRef.current.presenceState();
+      let isPartnerOnline = false;
+      for (const key of Object.keys(state)) {
+        if (key === partnerId) {
+          isPartnerOnline = true;
+          break;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const entries = (state[key] || []) as any[];
+        if (Array.isArray(entries) && entries.some((e: any) => e.user_id === partnerId)) {
+          isPartnerOnline = true;
+          break;
+        }
+      }
+      if (isPartnerOnline) {
+        updatePartnerStatus('online', 'Active now');
+      } else {
+        updatePartnerStatus('offline', 'Offline');
+      }
+    };
+
+    // 3. Setup Broadcast & Presence Channel (Typing, Online status, Seen receipts)
     const presenceChannel = supabase.channel(`chat_presence_${conversationId}`, {
       config: { presence: { key: authUser.id } },
     });
     presenceChannelRef.current = presenceChannel;
 
     presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        checkPartnerInPresence();
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on('presence', { event: 'join' }, ({ key, newPresences }: { key: string; newPresences: any[] }) => {
+        const isPartner =
+          key === partnerId ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          newPresences?.some((p: any) => p.user_id === partnerId);
+        if (isPartner) {
+          updatePartnerStatus('online', 'Active now');
+        }
+      })
+      .on('presence', { event: 'leave' }, () => {
+        checkPartnerInPresence();
+      })
       .on('broadcast', { event: 'typing' }, (payload) => {
         if (payload.payload?.userId !== authUser.id) {
           setIsPartnerTyping(Boolean(payload.payload?.isTyping));
@@ -245,6 +296,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setIsPartnerTyping(false);
             }, 3000);
           }
+        }
+      })
+      .on('broadcast', { event: 'messages_seen' }, (payload) => {
+        if (payload.payload?.seenBy !== authUser.id) {
+          setMessages((prev) =>
+            prev.map((m) => (m.sender === 'user' ? { ...m, status: 'seen' } : m))
+          );
         }
       })
       .subscribe(async (status) => {
@@ -257,15 +315,49 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
+    // Untrack presence when tab is hidden or page is closed, re-track when visible
+    const handleVisibilityChange = async () => {
+      if (!presenceChannelRef.current) return;
+      if (document.hidden) {
+        try {
+          await presenceChannelRef.current.untrack();
+        } catch (err) {
+          console.error('Error untracking presence:', err);
+        }
+      } else {
+        try {
+          await presenceChannelRef.current.track({
+            online_at: new Date().toISOString(),
+            user_id: authUser.id,
+            username: authUser.username,
+          });
+        } catch (err) {
+          console.error('Error tracking presence:', err);
+        }
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.untrack();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       supabase.removeChannel(messageChannel);
       if (presenceChannelRef.current) {
+        presenceChannelRef.current.untrack();
         supabase.removeChannel(presenceChannelRef.current);
         presenceChannelRef.current = null;
       }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [connection?.conversation_id, authUser, dbMessageToUI]);
+  }, [connection, authUser, dbMessageToUI, updatePartnerStatus]);
 
   // Broadcast typing status
   const broadcastTyping = (isTyping: boolean) => {
@@ -371,18 +463,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Local / Offline fallback simulation
+    // Local / Offline fallback simulation (transitions to 'sent', never to 'seen' automatically)
     setTimeout(() => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, status: 'delivered' } : m))
+        prev.map((m) => (m.id === tempId ? { ...m, status: 'sent' } : m))
       );
-    }, 600);
-
-    setTimeout(() => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, status: 'seen' } : m))
-      );
-    }, 1400);
+    }, 400);
   };
 
   // EDIT MESSAGE
@@ -479,8 +565,50 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // MARK CHAT AS SEEN (Only when partner opens and views the chat)
+  const markChatAsSeen = useCallback(async () => {
+    // 1. Mark incoming partner messages as seen locally
+    setMessages((prev) => {
+      let changed = false;
+      const next = prev.map((msg) => {
+        if (msg.sender === 'partner' && msg.status !== 'seen') {
+          changed = true;
+          return { ...msg, status: 'seen' as const };
+        }
+        return msg;
+      });
+      return changed ? next : prev;
+    });
+
+    // 2. Broadcast and persist seen state if Supabase is configured
+    if (isSupabaseConfigured && connection?.conversation_id && authUser) {
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.send({
+          type: 'broadcast',
+          event: 'messages_seen',
+          payload: {
+            conversationId: connection.conversation_id,
+            seenBy: authUser.id,
+            seenAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      try {
+        await supabase
+          .from('messages')
+          .update({ seen_at: new Date().toISOString() })
+          .eq('conversation_id', connection.conversation_id)
+          .neq('sender_id', authUser.id)
+          .is('seen_at', null);
+      } catch (err) {
+        console.error('Error updating seen_at in Supabase:', err);
+      }
+    }
+  }, [connection?.conversation_id, authUser]);
+
   const markAllAsRead = () => {
-    setUnreadCount(0);
+    markChatAsSeen();
   };
 
   const clearChat = () => {
@@ -646,6 +774,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setActiveViewOnceMedia,
         broadcastTyping,
         uploadMediaFile,
+        markChatAsSeen,
       }}
     >
       {children}

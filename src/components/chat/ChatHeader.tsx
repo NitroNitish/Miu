@@ -56,7 +56,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = () => {
             {partner.name}
           </h2>
           <p className="text-[13px] text-[#737373] leading-tight truncate mt-0.5 font-normal">
-            {partner.lastActive || 'Active now'}
+            {partner.status === 'online' ? 'Active now' : partner.lastActive || 'Offline'}
           </p>
         </div>
       </div>

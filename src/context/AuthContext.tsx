@@ -41,6 +41,7 @@ interface AuthContextType {
   ) => Promise<{ success: boolean; connectionId?: string; error?: string }>;
   disconnectConnection: () => Promise<{ success: boolean; error?: string }>;
   refreshConnection: () => Promise<void>;
+  updatePartnerStatus: (status: 'online' | 'offline', lastActive?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -92,12 +93,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       avatar:
         dbPartner.avatar_url ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
-      status: 'online',
-      lastActive: 'Active now',
+      status: 'offline',
+      lastActive: 'Offline',
       bio: dbPartner.bio || 'Private by design.',
       relationshipDate: 'Connected on Miu',
       timezone: 'GMT+2 (Vienna)',
     };
+  }, []);
+
+  const updatePartnerStatus = useCallback((status: 'online' | 'offline', lastActive?: string) => {
+    setPartner((prev) => {
+      const newLastActive =
+        lastActive ||
+        (status === 'online'
+          ? 'Active now'
+          : prev.status === 'online'
+          ? 'Offline'
+          : prev.lastActive || 'Offline');
+      if (prev.status === status && prev.lastActive === newLastActive) return prev;
+      return {
+        ...prev,
+        status,
+        lastActive: newLastActive,
+      };
+    });
   }, []);
 
   // Fetch connection & partner for the given user ID
@@ -635,6 +654,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         acceptInvitation,
         disconnectConnection,
         refreshConnection,
+        updatePartnerStatus,
       }}
     >
       {children}

@@ -12,7 +12,7 @@ import { Modal } from '../components/common/Modal';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
 import { Message, MemoryItem } from '../types';
-import { ArrowDown, CheckCheck, Sparkles } from 'lucide-react';
+import { ArrowDown, Check, CheckCheck, Sparkles } from 'lucide-react';
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ export const ChatPage: React.FC = () => {
     partner,
     setActiveViewOnceMedia,
     uploadMediaFile,
+    markChatAsSeen,
   } = useChat();
 
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -56,6 +57,28 @@ export const ChatPage: React.FC = () => {
   useEffect(() => {
     scrollToBottom('smooth');
   }, [messages.length, isPartnerTyping]);
+
+  // Mark incoming messages as seen when chat is active/opened
+  useEffect(() => {
+    markChatAsSeen();
+  }, [markChatAsSeen, messages.length]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      markChatAsSeen();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        markChatAsSeen();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [markChatAsSeen]);
 
   const handleScroll = () => {
     if (!scrollContainerRef.current) return;
@@ -343,8 +366,8 @@ export const ChatPage: React.FC = () => {
               />
             ))}
 
-            {/* Seen indicator under latest outgoing message */}
-            {lastMessageIsOutgoing && (
+            {/* Status indicator under latest outgoing message: Only shows 'Seen' when partner has actually viewed */}
+            {lastMessageIsOutgoing && lastMessage?.status === 'seen' && (
               <div
                 className="flex justify-end items-center gap-1 pr-1.5 mt-1.5 text-[12px] text-[#737373] font-medium select-none"
                 style={{
@@ -356,6 +379,34 @@ export const ChatPage: React.FC = () => {
               >
                 <span>Seen</span>
                 <CheckCheck className="w-3.5 h-3.5 text-[#35B779]" />
+              </div>
+            )}
+            {lastMessageIsOutgoing && lastMessage?.status === 'delivered' && (
+              <div
+                className="flex justify-end items-center gap-1 pr-1.5 mt-1.5 text-[12px] text-[#737373] font-medium select-none"
+                style={{
+                  transform: `translateX(-${dragOffset}px)`,
+                  transition: isActivelyDragging
+                    ? 'none'
+                    : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
+                }}
+              >
+                <span>Delivered</span>
+                <CheckCheck className="w-3.5 h-3.5 text-[#737373]" />
+              </div>
+            )}
+            {lastMessageIsOutgoing && (lastMessage?.status === 'sent' || lastMessage?.status === 'sending') && (
+              <div
+                className="flex justify-end items-center gap-1 pr-1.5 mt-1.5 text-[12px] text-[#737373] font-medium select-none"
+                style={{
+                  transform: `translateX(-${dragOffset}px)`,
+                  transition: isActivelyDragging
+                    ? 'none'
+                    : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
+                }}
+              >
+                <span>{lastMessage?.status === 'sending' ? 'Sending' : 'Sent'}</span>
+                <Check className="w-3.5 h-3.5 text-[#737373]" />
               </div>
             )}
 

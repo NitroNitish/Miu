@@ -113,10 +113,16 @@ export const Sidebar: React.FC = () => {
             <p className="text-xs font-semibold text-[#171717] dark:text-[#F5F5F5] truncate">
               {partner.name}
             </p>
-            <p className="text-[11px] text-[#35B779] flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#35B779] inline-block" />
-              {partner.lastActive}
-            </p>
+            {partner.status === 'online' ? (
+              <p className="text-[11px] text-[#35B779] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#35B779] inline-block" />
+                Active now
+              </p>
+            ) : (
+              <p className="text-[11px] text-[#777777] dark:text-[#999999] flex items-center gap-1">
+                {partner.lastActive || 'Offline'}
+              </p>
+            )}
           </div>
         </NavLink>
 

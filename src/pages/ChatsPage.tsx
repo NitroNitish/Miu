@@ -192,7 +192,13 @@ export const ChatsPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs text-[#777777] dark:text-[#999999] truncate pr-2">
                     {lastMessage?.sender === 'user' && (
-                      <CheckCheck className="w-3.5 h-3.5 text-[#35B779] inline shrink-0" />
+                      lastMessage.status === 'seen' ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-[#35B779] inline shrink-0" />
+                      ) : lastMessage.status === 'delivered' ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-[#777777] dark:text-[#999999] inline shrink-0" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5 text-[#777777] dark:text-[#999999] inline shrink-0" />
+                      )
                     )}
                     <span className="truncate">{formatLastMessagePreview()}</span>
                   </div>
