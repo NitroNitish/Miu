@@ -25,6 +25,8 @@ export interface Message {
     id: string;
     sender: 'user' | 'partner';
     text: string;
+    mediaUrl?: string;
+    type?: MessageType;
   };
   reactions?: { [emoji: string]: number };
   isViewOnce?: boolean;

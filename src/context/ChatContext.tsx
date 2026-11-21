@@ -196,7 +196,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .order('created_at', { ascending: true });
 
         if (!error && dbMessages) {
-          const uiMsgs = dbMessages.map(dbMessageToUI);
+          // Map for fast reply resolution across conversations
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const msgMap = new Map<string, any>();
+          dbMessages.forEach((m) => msgMap.set(m.id, m));
+
+          const uiMsgs = dbMessages.map((m) => {
+            const ui = dbMessageToUI(m);
+            if (m.reply_to_id && msgMap.has(m.reply_to_id)) {
+              const orig = msgMap.get(m.reply_to_id);
+              const origIsSender = authUser ? orig.sender_id === authUser.id : orig.sender_id === 'user';
+              let origText = orig.content || '';
+              if (orig.message_type === 'voice') origText = `🎤 Voice note (${orig.duration || 0}s)`;
+              else if (orig.message_type === 'image') origText = '📷 Photo';
+              else if (orig.message_type === 'video') origText = '🎥 Video';
+              else if (orig.message_type === 'doodle') origText = '✏️ Doodle';
+              else if (orig.message_type === 'view_once') origText = '👁️ View once photo';
+
+              ui.replyTo = {
+                id: orig.id,
+                sender: origIsSender ? 'user' : 'partner',
+                text: origText || 'Original message',
+                mediaUrl: orig.media_path,
+                type: orig.message_type,
+              };
+            }
+            return ui;
+          });
           setMessages(uiMsgs);
         }
       } catch (err) {
@@ -222,6 +248,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const incoming = dbMessageToUI(payload.new);
             setMessages((prev) => {
               if (prev.some((x) => x.id === incoming.id)) return prev;
+              if (payload.new.reply_to_id) {
+                const orig = prev.find((m) => m.id === payload.new.reply_to_id);
+                if (orig) {
+                  incoming.replyTo = {
+                    id: orig.id,
+                    sender: orig.sender,
+                    text: orig.content || (orig.type === 'voice' ? 'Voice note' : 'Media message'),
+                    mediaUrl: orig.mediaUrl,
+                    type: orig.type,
+                  };
+                }
+              }
               return [...prev, incoming];
             });
           } else if (payload.eventType === 'UPDATE') {
@@ -452,9 +490,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .single();
 
         if (!error && inserted) {
-          // Replace tempId with actual server message
+          // Replace tempId with actual server message, keeping replyTo details
           setMessages((prev) =>
-            prev.map((m) => (m.id === tempId ? { ...dbMessageToUI(inserted), status: 'sent' } : m))
+            prev.map((m) =>
+              m.id === tempId ? { ...dbMessageToUI(inserted), status: 'sent', replyTo } : m
+            )
           );
           return;
         }

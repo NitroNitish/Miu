@@ -52,6 +52,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   }, [text]);
 
+  // Focus textarea when entering reply mode
+  useEffect(() => {
+    if (replyingTo && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [replyingTo]);
+
   // Clean up recording tracks & audio context on unmount
   useEffect(() => {
     return () => {
@@ -332,19 +339,48 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         </div>
       )}
 
-      {/* Replying Banner */}
+      {/* Instagram-style Compact Replying Bar */}
       {replyingTo && (
-        <div className="flex items-center justify-between px-4 py-2 bg-[#1A1A1A] border-b border-[#262626] text-xs">
-          <div className="flex items-center gap-2 text-neutral-300 truncate">
-            <Reply className="w-3.5 h-3.5 text-[#3797F0] shrink-0" />
-            <span className="text-[#8E8E8E] shrink-0">
-              Replying to {replyingTo.sender === 'user' ? 'yourself' : partner.name}:
-            </span>
-            <span className="truncate italic text-white/90">"{replyingTo.content}"</span>
+        <div className="flex items-center justify-between px-3.5 py-2 bg-[#1A1A1E] border-b border-[#2A2A30] text-xs animate-slide-up select-none">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-[3px] h-8 rounded-full bg-gradient-to-b from-[#D91A8E] via-[#B6A4DC] to-[#6366F1] shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 leading-tight">
+                <Reply className="w-3 h-3 text-[#B6A4DC] shrink-0" />
+                <span className="text-[11px] font-bold text-[#B6A4DC] truncate">
+                  Replying to {replyingTo.sender === 'user' ? 'yourself' : partner.name}
+                </span>
+              </div>
+              <p className="text-[12px] text-neutral-300 truncate leading-tight mt-0.5 font-normal">
+                {replyingTo.type === 'voice'
+                  ? `🎤 Voice note (${replyingTo.duration || 0}s)`
+                  : replyingTo.type === 'image'
+                  ? '📷 Photo'
+                  : replyingTo.type === 'video'
+                  ? '🎥 Video'
+                  : replyingTo.type === 'doodle'
+                  ? '✏️ Doodle'
+                  : replyingTo.type === 'view_once'
+                  ? '👁️ View once photo'
+                  : replyingTo.content || 'Message'}
+              </p>
+            </div>
+            {replyingTo.mediaUrl && (
+              <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-black/40">
+                <img
+                  src={replyingTo.mediaUrl}
+                  alt="Reply media preview"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
           </div>
           <button
+            type="button"
             onClick={onCancelReply}
-            className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            className="ml-2 p-1.5 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 active:scale-95"
+            aria-label="Cancel reply"
+            title="Cancel reply"
           >
             <X className="w-4 h-4" />
           </button>

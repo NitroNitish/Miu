@@ -34,6 +34,8 @@ export const ChatPage: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [viewingMedia, setViewingMedia] = useState<MemoryItem | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Swipe to reveal timestamps state & gesture tracking
   const [dragOffset, setDragOffset] = useState(0);
@@ -184,17 +186,62 @@ export const ChatPage: React.FC = () => {
     };
   }, []);
 
+  const getReplyPayload = (target: Message | null) => {
+    if (!target) return undefined;
+    let replyText = target.content || '';
+    if (target.type === 'voice') replyText = `🎤 Voice note (${target.duration || 0}s)`;
+    else if (target.type === 'image') replyText = '📷 Photo';
+    else if (target.type === 'video') replyText = '🎥 Video';
+    else if (target.type === 'doodle') replyText = '✏️ Doodle';
+    else if (target.type === 'view_once') replyText = '👁️ View once photo';
+
+    return {
+      id: target.id,
+      sender: target.sender,
+      text: replyText || 'Original message',
+      mediaUrl: target.mediaUrl,
+      type: target.type,
+    };
+  };
+
+  const handleNavigateToOriginal = (targetMessageId: string) => {
+    const originalMsg = messages.find((m) => m.id === targetMessageId);
+
+    if (!originalMsg) {
+      setToastMessage('Original message is no longer available');
+      return;
+    }
+
+    if (originalMsg.isDeletedForEveryone) {
+      setToastMessage('The original message was deleted');
+      return;
+    }
+
+    const el = document.getElementById(`msg-${targetMessageId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMessageId(targetMessageId);
+
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 1500);
+
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate(12);
+        } catch {}
+      }
+    } else {
+      setToastMessage('Original message is no longer available');
+    }
+  };
+
   const handleSendMessage = (text: string) => {
     sendMessage({
       content: text,
       type: 'text',
-      replyTo: replyingTo
-        ? {
-            id: replyingTo.id,
-            sender: replyingTo.sender,
-            text: replyingTo.content || 'Media message',
-          }
-        : undefined,
+      replyTo: getReplyPayload(replyingTo),
     });
     setReplyingTo(null);
   };
@@ -209,7 +256,9 @@ export const ChatPage: React.FC = () => {
       type,
       mediaUrl: url,
       isViewOnce: type === 'view_once',
+      replyTo: getReplyPayload(replyingTo),
     });
+    setReplyingTo(null);
     setToastMessage(type === 'view_once' ? 'Sent View Once photo' : 'Media sent');
   };
 
@@ -240,7 +289,9 @@ export const ChatPage: React.FC = () => {
       type: 'voice',
       mediaUrl: finalMediaUrl,
       duration,
+      replyTo: getReplyPayload(replyingTo),
     });
+    setReplyingTo(null);
     setToastMessage('Voice note sent');
   };
 
@@ -358,11 +409,13 @@ export const ChatPage: React.FC = () => {
                 totalMessages={messages.length}
                 dragOffset={dragOffset}
                 isDragging={isActivelyDragging}
+                isHighlighted={highlightedMessageId === msg.id}
                 onReply={(m) => setReplyingTo(m)}
                 onCopy={handleCopy}
                 onEdit={handleEditClick}
                 onOpenMedia={handleOpenMedia}
                 onOpenViewOnce={handleOpenViewOnce}
+                onNavigateToOriginal={handleNavigateToOriginal}
               />
             ))}
 

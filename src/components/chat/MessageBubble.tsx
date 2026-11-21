@@ -19,6 +19,8 @@ interface MessageBubbleProps {
   onEdit?: (msg: Message) => void;
   onOpenMedia?: (url: string) => void;
   onOpenViewOnce?: (messageId: string, url: string) => void;
+  onNavigateToOriginal?: (messageId: string) => void;
+  isHighlighted?: boolean;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -34,6 +36,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onEdit,
   onOpenMedia,
   onOpenViewOnce,
+  onNavigateToOriginal,
+  isHighlighted = false,
 }) => {
   const { deleteMessage, deleteForEveryone, addReaction, partner } = useChat();
   const [showMenu, setShowMenu] = useState(false);
@@ -100,15 +104,150 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     return 'bg-gradient-to-r from-[#6366F1] to-[#4F46E5]';
   };
 
-  const handleTouchStart = () => {
+  // Swipe to reply gesture state
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const touchStartXRef = useRef(0);
+  const touchStartYRef = useRef(0);
+  const gestureModeRef = useRef<'none' | 'vertical' | 'swipe_reply' | 'swipe_left'>('none');
+  const hasTriggeredHapticRef = useRef(false);
+  const isMouseDownRef = useRef(false);
+
+  const triggerHaptic = (pattern: number | number[] = 15) => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    gestureModeRef.current = 'none';
+    hasTriggeredHapticRef.current = false;
+
     longPressTimerRef.current = setTimeout(() => {
       setShowMenu(true);
+      triggerHaptic(20);
     }, 450);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const deltaX = currentX - touchStartXRef.current;
+    const deltaY = currentY - touchStartYRef.current;
+
+    if (gestureModeRef.current === 'none') {
+      if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+        gestureModeRef.current = 'vertical';
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        return;
+      }
+      if (deltaX < -10) {
+        gestureModeRef.current = 'swipe_left';
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        return;
+      }
+      if (deltaX > 10 && deltaX > Math.abs(deltaY) * 1.2) {
+        gestureModeRef.current = 'swipe_reply';
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        setIsSwiping(true);
+      }
+    }
+
+    if (gestureModeRef.current === 'swipe_reply') {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      const pull = Math.max(0, deltaX - 10);
+      const damped = Math.min(65, Math.pow(pull, 0.78) * 1.7);
+      setSwipeOffset(damped);
+
+      // Trigger haptic when crossing activation threshold (45px)
+      if (damped >= 45) {
+        if (!hasTriggeredHapticRef.current) {
+          triggerHaptic(18);
+          hasTriggeredHapticRef.current = true;
+        }
+      } else if (damped < 35) {
+        hasTriggeredHapticRef.current = false;
+      }
+    }
   };
 
   const handleTouchEnd = () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+
+    if (gestureModeRef.current === 'swipe_reply') {
+      if (swipeOffset >= 45) {
+        onReply(message);
+        triggerHaptic([10, 30, 15]);
+      }
+      setIsSwiping(false);
+      setSwipeOffset(0);
+    }
+    gestureModeRef.current = 'none';
+  };
+
+  // Desktop mouse drag to reply support
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, textarea, a')) return;
+    touchStartXRef.current = e.clientX;
+    touchStartYRef.current = e.clientY;
+    isMouseDownRef.current = true;
+    gestureModeRef.current = 'none';
+    hasTriggeredHapticRef.current = false;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMouseDownRef.current) return;
+    const deltaX = e.clientX - touchStartXRef.current;
+    const deltaY = e.clientY - touchStartYRef.current;
+
+    if (gestureModeRef.current === 'none') {
+      if (deltaX > 10 && deltaX > Math.abs(deltaY) * 1.2) {
+        gestureModeRef.current = 'swipe_reply';
+        setIsSwiping(true);
+      }
+    }
+
+    if (gestureModeRef.current === 'swipe_reply') {
+      const pull = Math.max(0, deltaX - 10);
+      const damped = Math.min(65, Math.pow(pull, 0.78) * 1.7);
+      setSwipeOffset(damped);
+
+      if (damped >= 45) {
+        if (!hasTriggeredHapticRef.current) {
+          triggerHaptic(18);
+          hasTriggeredHapticRef.current = true;
+        }
+      } else if (damped < 35) {
+        hasTriggeredHapticRef.current = false;
+      }
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (isMouseDownRef.current) {
+      isMouseDownRef.current = false;
+      if (gestureModeRef.current === 'swipe_reply') {
+        if (swipeOffset >= 45) {
+          onReply(message);
+          triggerHaptic([10, 30, 15]);
+        }
+        setIsSwiping(false);
+        setSwipeOffset(0);
+      }
+      gestureModeRef.current = 'none';
     }
   };
 
@@ -157,35 +296,55 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
+      id={`msg-${message.id}`}
       className={`group relative flex flex-col ${spacingClass} ${isOutgoing ? 'items-end' : 'items-start'
-        } w-full select-none`}
+        } w-full select-none transition-all duration-300 ${
+        isHighlighted
+          ? 'ring-2 ring-[#B6A4DC] ring-offset-2 ring-offset-black rounded-[26px] scale-[1.02] shadow-[0_0_24px_rgba(182,164,220,0.6)] bg-white/5'
+          : ''
+      }`}
       style={{
-        transform: `translateX(-${dragOffset}px)`,
-        transition: isDragging ? 'none' : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
+        transform: `translateX(${swipeOffset - dragOffset}px)`,
+        transition: isSwiping || isDragging ? 'none' : 'transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1)',
       }}
       onContextMenu={(e) => {
         e.preventDefault();
         setShowMenu(true);
       }}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
     >
-      {/* Reply target banner if replying to a message */}
-      {message.replyTo && (
+      {/* Fluid Swipe-Right-to-Reply Icon on the left */}
+      <div
+        className="absolute left-0 top-1/2 -translate-y-1/2 pointer-events-none select-none z-10 flex items-center justify-center pl-1 sm:pl-2"
+        style={{
+          opacity: Math.min(1, Math.max(0, (swipeOffset - 8) / 28)),
+          transform: `translateX(${Math.min(swipeOffset * 0.4, 20)}px) scale(${Math.min(
+            1.12,
+            Math.max(0.4, swipeOffset / 40)
+          )})`,
+          transition: isSwiping ? 'none' : 'all 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
+        }}
+      >
         <div
-          className={`text-[12px] px-3.5 py-1.5 mb-1 rounded-t-xl max-w-[300px] sm:max-w-xs truncate border-l-2 flex items-center gap-1.5 opacity-80 ${isOutgoing
-              ? 'bg-[#1A1A1A] border-[#D91A8E] text-neutral-300 mr-1'
-              : 'bg-[#1A1A1A] border-neutral-500 text-neutral-300 ml-10'
-            }`}
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-150 shadow-md ${
+            swipeOffset >= 45
+              ? 'bg-[#A99BCB] dark:bg-[#B6A4DC] text-[#111214] scale-110 shadow-[0_0_14px_rgba(182,164,220,0.6)] ring-2 ring-white/30'
+              : 'bg-[#1E1E22] border border-[#35363C] text-neutral-300'
+          }`}
         >
-          <Reply className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
-          <span className="font-semibold text-white">
-            {message.replyTo.sender === 'user' ? 'You' : partner.name}:
-          </span>
-          <span className="truncate">{message.replyTo.text}</span>
+          <Reply
+            className={`w-4 h-4 transition-transform duration-150 ${
+              swipeOffset >= 45 ? 'scale-110 -rotate-12' : 'scale-100 rotate-0'
+            }`}
+          />
         </div>
-      )}
+      </div>
 
       {/* Row container with flush alignment */}
       <div className="flex items-end gap-2.5 max-w-[85%] sm:max-w-[75%]">
@@ -216,6 +375,42 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               : 'px-4.5 py-3'
             }`}
         >
+          {/* Quoted replied snippet inside the bubble */}
+          {message.replyTo && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateToOriginal?.(message.replyTo!.id);
+              }}
+              className={`mb-2 p-2 sm:p-2.5 rounded-xl border-l-[3px] text-xs cursor-pointer select-none transition-all active:scale-[0.98] ${
+                isOutgoing
+                  ? 'bg-black/30 hover:bg-black/40 border-white/90 text-white/90 shadow-xs'
+                  : 'bg-white/10 hover:bg-white/15 border-[#B6A4DC] text-neutral-200 shadow-xs'
+              }`}
+              title="Tap to jump to original message"
+            >
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <Reply className={`w-3 h-3 shrink-0 ${isOutgoing ? 'text-white/80' : 'text-[#B6A4DC]'}`} />
+                <span className={`font-bold text-[11px] truncate tracking-tight ${isOutgoing ? 'text-white' : 'text-[#B6A4DC]'}`}>
+                  {message.replyTo.sender === 'user' ? 'You' : partner.name}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] opacity-85 truncate leading-snug flex-1 font-normal">
+                  {message.replyTo.text || 'Original message'}
+                </p>
+                {message.replyTo.mediaUrl && (
+                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-white/15 bg-black/40">
+                    <img
+                      src={message.replyTo.mediaUrl}
+                      alt="Quoted media preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {/* TEXT MESSAGE */}
           {message.type === 'text' && (
             <div className="text-[16px] leading-[1.38] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px]">
