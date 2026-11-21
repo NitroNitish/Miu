@@ -347,7 +347,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       </div>
 
       {/* Row container with flush alignment */}
-      <div className="flex items-end gap-2.5 max-w-[85%] sm:max-w-[75%]">
+      <div
+        className={`flex items-end gap-2.5 max-w-[88%] sm:max-w-[80%] min-w-0 w-fit ${
+          isOutgoing ? 'justify-end' : 'justify-start'
+        }`}
+      >
         {/* Incoming sender avatar (32px beside last message of group) */}
         {!isOutgoing && (
           <div className="w-[32px] shrink-0 flex items-center justify-center">
@@ -365,15 +369,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Main Message Bubble (slightly bigger: 16px text, generous padding) */}
+        {/* Main Message Bubble (Instagram-style compact bubble with max-width: 80%, width: fit-content, min-width: 0) */}
         <div
-          className={`relative transition-all shadow-xs ${getRadiusClasses()} ${isOutgoing
+          className={`relative transition-all shadow-xs max-w-[80%] sm:max-w-[75%] w-fit min-w-0 flex flex-col overflow-hidden break-words ${getRadiusClasses()} ${
+            isOutgoing
               ? `${getOutgoingGradient()} text-white`
               : 'bg-[#262626] text-white'
-            } ${message.type === 'image' || message.type === 'doodle'
+          } ${
+            message.type === 'image' || message.type === 'doodle'
               ? 'p-1.5'
-              : 'px-4.5 py-3'
-            }`}
+              : 'px-4 py-2.5 sm:px-4.5 sm:py-3'
+          }`}
+          style={{ maxWidth: '80%', width: 'fit-content', minWidth: 0 }}
         >
           {/* Quoted replied snippet inside the bubble */}
           {message.replyTo && (
@@ -382,25 +389,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 e.stopPropagation();
                 onNavigateToOriginal?.(message.replyTo!.id);
               }}
-              className={`mb-2 p-2 sm:p-2.5 rounded-xl border-l-[3px] text-xs cursor-pointer select-none transition-all active:scale-[0.98] ${
+              className={`w-full max-w-full min-w-0 box-border mb-2 p-2 sm:p-2.5 rounded-lg border-l-[3px] text-xs cursor-pointer select-none transition-all active:scale-[0.98] overflow-hidden ${
                 isOutgoing
                   ? 'bg-black/30 hover:bg-black/40 border-white/90 text-white/90 shadow-xs'
                   : 'bg-white/10 hover:bg-white/15 border-[#B6A4DC] text-neutral-200 shadow-xs'
               }`}
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               title="Tap to jump to original message"
             >
-              <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="flex items-center gap-1.5 mb-1 min-w-0 w-full overflow-hidden">
                 <Reply className={`w-3 h-3 shrink-0 ${isOutgoing ? 'text-white/80' : 'text-[#B6A4DC]'}`} />
-                <span className={`font-bold text-[11px] truncate tracking-tight ${isOutgoing ? 'text-white' : 'text-[#B6A4DC]'}`}>
+                <span className={`font-semibold text-[11px] truncate tracking-tight min-w-0 ${isOutgoing ? 'text-white' : 'text-[#B6A4DC]'}`}>
                   {message.replyTo.sender === 'user' ? 'You' : partner.name}
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[12px] opacity-85 truncate leading-snug flex-1 font-normal">
+              <div className="flex items-center justify-between gap-2 min-w-0 w-full overflow-hidden">
+                <p className="text-[12px] opacity-85 leading-snug flex-1 min-w-0 overflow-hidden line-clamp-2 break-words font-normal">
                   {message.replyTo.text || 'Original message'}
                 </p>
                 {message.replyTo.mediaUrl && (
-                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-white/15 bg-black/40">
+                  <div className="w-8 h-8 rounded-md overflow-hidden shrink-0 border border-white/15 bg-black/40">
                     <img
                       src={message.replyTo.mediaUrl}
                       alt="Quoted media preview"
@@ -413,7 +421,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
           {/* TEXT MESSAGE */}
           {message.type === 'text' && (
-            <div className="text-[16px] leading-[1.38] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px]">
+            <div className="text-[16px] leading-[1.38] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px] min-w-0 max-w-full">
               <span>{message.content}</span>
               {message.isEdited && (
                 <span className="ml-1.5 text-[11px] opacity-60 italic">(edited)</span>
