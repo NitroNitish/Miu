@@ -341,17 +341,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* Instagram-style Compact Replying Bar */}
       {replyingTo && (
-        <div className="flex items-center justify-between px-3.5 py-2 bg-[#1A1A1E] border-b border-[#2A2A30] text-xs animate-slide-up select-none">
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="w-[3px] h-8 rounded-full bg-gradient-to-b from-[#D91A8E] via-[#B6A4DC] to-[#6366F1] shrink-0" />
+        <div className="flex items-center justify-between px-3 py-1.5 bg-[#1A1A1E] border-b border-[#2A2A30] text-xs animate-slide-up select-none">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="w-[3px] h-7 rounded-full bg-gradient-to-b from-[#D91A8E] via-[#B6A4DC] to-[#6366F1] shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 leading-tight">
-                <Reply className="w-3 h-3 text-[#B6A4DC] shrink-0" />
-                <span className="text-[11px] font-bold text-[#B6A4DC] truncate">
+                <Reply className="w-2.5 h-2.5 text-[#B6A4DC] shrink-0" />
+                <span className="text-[10.5px] font-bold text-[#B6A4DC] truncate">
                   Replying to {replyingTo.sender === 'user' ? 'yourself' : partner.name}
                 </span>
               </div>
-              <p className="text-[12px] text-neutral-300 truncate leading-tight mt-0.5 font-normal">
+              <p className="text-[11px] text-neutral-300 truncate leading-tight mt-0.5 font-normal">
                 {replyingTo.type === 'voice'
                   ? `🎤 Voice note (${replyingTo.duration || 0}s)`
                   : replyingTo.type === 'image'
@@ -366,7 +366,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               </p>
             </div>
             {replyingTo.mediaUrl && (
-              <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-white/10 bg-black/40">
+              <div className="w-7 h-7 rounded-md overflow-hidden shrink-0 border border-white/10 bg-black/40">
                 <img
                   src={replyingTo.mediaUrl}
                   alt="Reply media preview"
@@ -382,24 +382,24 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             aria-label="Cancel reply"
             title="Cancel reply"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       )}
 
       {/* Main Composer Row */}
-      <div className="w-full px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2.5 max-w-full box-border">
+      <div className="w-full px-2.5 py-1.5 sm:px-3.5 sm:py-2 flex items-center gap-2 max-w-full box-border">
         {isRecording ? (
           /* Live Voice Recording UI */
-          <div className="flex-1 min-w-0 min-h-[44px] sm:min-h-[48px] flex items-center justify-between bg-[#262626] rounded-full px-4 py-2 animate-fade-in">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
-              <span className="text-sm font-mono font-medium text-white shrink-0">
+          <div className="flex-1 min-w-0 min-h-[38px] sm:min-h-[42px] flex items-center justify-between bg-[#262626] rounded-full px-3.5 py-1.5 animate-fade-in">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping shrink-0" />
+              <span className="text-xs font-mono font-medium text-white shrink-0">
                 {formatRecordTime(recordingSeconds)}
               </span>
 
               {/* Dynamic Live Audio Level Waveform */}
-              <div className="flex items-center gap-[3px] h-5 overflow-hidden ml-1">
+              <div className="flex items-center gap-[2.5px] h-4.5 overflow-hidden ml-1">
                 {audioLevels.map((val, idx) => (
                   <span
                     key={idx}
@@ -410,21 +410,21 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={cancelRecording}
-                className="p-2 text-neutral-400 hover:text-red-400 active:scale-95 transition-all cursor-pointer rounded-full hover:bg-white/10"
+                className="p-1.5 text-neutral-400 hover:text-red-400 active:scale-95 transition-all cursor-pointer rounded-full hover:bg-white/10"
                 title="Cancel recording"
               >
-                <Trash2 className="w-4.5 h-4.5" />
+                <Trash2 className="w-4 h-4" />
               </button>
               <button
                 type="button"
                 onClick={sendRecording}
-                className="px-4 py-1.5 rounded-full bg-[#B6A4DC] text-[#111214] font-bold text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                className="px-3.5 py-1 rounded-full bg-[#B6A4DC] text-[#111214] font-bold text-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-3 h-3" />
                 <span>Send</span>
               </button>
             </div>
@@ -437,13 +437,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               type="button"
               onClick={() => cameraInputRef.current?.click()}
               aria-label="Camera"
-              className="w-[42px] h-[42px] sm:w-[46px] sm:h-[46px] rounded-full bg-[#3797F0] hover:bg-[#2884db] active:scale-95 text-white flex items-center justify-center shrink-0 transition-transform cursor-pointer shadow-sm"
+              className="w-[38px] h-[38px] sm:w-[40px] sm:h-[40px] rounded-full bg-[#3797F0] hover:bg-[#2884db] active:scale-95 text-white flex items-center justify-center shrink-0 transition-transform cursor-pointer shadow-sm"
             >
-              <Camera className="w-[21px] h-[21px] sm:w-[22px] sm:h-[22px] stroke-[2]" />
+              <Camera className="w-[19px] h-[19px] sm:w-[20px] sm:h-[20px] stroke-[2]" />
             </button>
 
             {/* Middle Input Pill */}
-            <div className="flex-1 min-w-0 min-h-[44px] sm:min-h-[48px] flex items-center bg-[#262626] rounded-full pl-4 pr-2.5 py-1 sm:py-1.5 border border-transparent focus-within:border-[#383838] transition-colors">
+            <div className="flex-1 min-w-0 min-h-[38px] sm:min-h-[42px] flex items-center bg-[#262626] rounded-full pl-3.5 pr-2 py-0.5 sm:py-1 border border-transparent focus-within:border-[#383838] transition-colors">
               <textarea
                 ref={textareaRef}
                 value={text}
@@ -451,7 +451,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 onKeyDown={handleKeyDown}
                 placeholder="Message..."
                 rows={1}
-                className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-[17px] text-white placeholder-[#8E8E8E] focus:outline-none resize-none max-h-32 leading-[1.35] py-1"
+                className="flex-1 min-w-0 bg-transparent text-[14.5px] sm:text-[15px] text-white placeholder-[#8E8E8E] focus:outline-none resize-none max-h-32 leading-[1.35] py-1"
               />
 
               {/* Inside Pill Right Icons */}
@@ -460,12 +460,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   type="button"
                   onClick={handleSend}
                   aria-label="Send"
-                  className="ml-1 text-[#3797F0] hover:text-[#5aa9f3] text-[16px] sm:text-[17px] font-semibold active:scale-95 transition-all cursor-pointer px-2.5 py-1 shrink-0"
+                  className="ml-1 text-[#3797F0] hover:text-[#5aa9f3] text-[14.5px] sm:text-[15px] font-semibold active:scale-95 transition-all cursor-pointer px-2 py-0.5 shrink-0"
                 >
                   Send
                 </button>
               ) : (
-                <div className="flex items-center gap-1.5 sm:gap-2.5 text-white shrink-0 ml-1.5">
+                <div className="flex items-center gap-1 sm:gap-2 text-white shrink-0 ml-1">
                   {/* Microphone (Start Voice Recording) */}
                   <button
                     type="button"
@@ -474,7 +474,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     className="p-1 sm:p-1.5 hover:opacity-80 active:scale-95 transition-all cursor-pointer text-white"
                     title="Hold or tap to record voice note"
                   >
-                    <Mic className="w-[21px] h-[21px] sm:w-[22px] sm:h-[22px] stroke-[1.8]" />
+                    <Mic className="w-[19px] h-[19px] sm:w-[20px] sm:h-[20px] stroke-[1.8]" />
                   </button>
 
                   {/* Gallery */}
@@ -485,7 +485,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     className="p-1 sm:p-1.5 hover:opacity-80 active:scale-95 transition-all cursor-pointer text-white"
                     title="Send image"
                   >
-                    <Image className="w-[21px] h-[21px] sm:w-[22px] sm:h-[22px] stroke-[1.8]" />
+                    <Image className="w-[19px] h-[19px] sm:w-[20px] sm:h-[20px] stroke-[1.8]" />
                   </button>
                 </div>
               )}

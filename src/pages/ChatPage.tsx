@@ -355,24 +355,24 @@ export const ChatPage: React.FC = () => {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 flex flex-col relative no-scrollbar touch-pan-y"
+          className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 py-2.5 flex flex-col relative no-scrollbar touch-pan-y"
         >
           {/* Top Encrypted Presence Card */}
-          <div className="flex flex-col items-center justify-center my-6 text-center select-none">
-            <div className="w-[84px] h-[84px] rounded-full overflow-hidden border-2 border-neutral-800 mb-2.5">
+          <div className="flex flex-col items-center justify-center my-5 text-center select-none">
+            <div className="w-[74px] h-[74px] rounded-full overflow-hidden border-2 border-neutral-800 mb-2">
               <img
                 src={partner.avatar}
                 alt={partner.name}
                 className="w-full h-full object-cover"
               />
             </div>
-            <h3 className="text-[18px] font-semibold text-white tracking-tight">
+            <h3 className="text-[16.5px] font-semibold text-white tracking-tight">
               {partner.name}
             </h3>
-            <p className="text-[13px] text-[#737373] mt-0.5">
+            <p className="text-[12px] text-[#737373] mt-0.5">
               Miu private messaging • End-to-end encrypted
             </p>
-            <div className="mt-4 px-3.5 py-1 rounded-full bg-[#1A1A1A] text-[12px] text-[#8E8E8E] font-medium">
+            <div className="mt-3 px-3 py-0.5 rounded-full bg-[#1A1A1A] text-[11px] text-[#8E8E8E] font-medium">
               Today
             </div>
           </div>

@@ -158,12 +158,12 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({
     : formatTime(actualDuration);
 
   return (
-    <div className="flex items-center gap-3 py-1 min-w-[210px] max-w-[270px] select-none">
+    <div className="flex items-center gap-2.5 py-0.5 min-w-[195px] max-w-[250px] select-none">
       {/* Play/Pause Button */}
       <button
         type="button"
         onClick={togglePlay}
-        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer shadow-xs ${
+        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-95 cursor-pointer shadow-xs ${
           isOutgoing
             ? 'bg-white/25 hover:bg-white/35 text-white dark:bg-black/25 dark:hover:bg-black/35 dark:text-[#111214]'
             : 'bg-[#A99BCB]/20 hover:bg-[#A99BCB]/30 text-[#826FB5] dark:bg-[#B6A4DC]/20 dark:hover:bg-[#B6A4DC]/30 dark:text-[#B6A4DC]'
@@ -171,15 +171,15 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({
         aria-label={isPlaying ? 'Pause voice note' : 'Play voice note'}
       >
         {isPlaying ? (
-          <Pause className="w-4 h-4 fill-current" />
+          <Pause className="w-3.5 h-3.5 fill-current" />
         ) : (
-          <Play className="w-4 h-4 fill-current translate-x-0.5" />
+          <Play className="w-3.5 h-3.5 fill-current translate-x-0.5" />
         )}
       </button>
 
       {/* Waveform Visualization & Time Scrubbing */}
-      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-        <div className="flex items-center gap-[3px] h-7 cursor-pointer" title="Scrub audio">
+      <div className="flex-1 flex flex-col gap-1 min-w-0">
+        <div className="flex items-center gap-[2.5px] h-6 cursor-pointer" title="Scrub audio">
           {waveformHeights.map((h, i) => {
             const barProgress = (i / waveformHeights.length) * actualDuration;
             const hasPlayed = progress >= barProgress;
@@ -193,16 +193,16 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({
                 key={i}
                 onClick={() => handleSeek(i)}
                 style={{ height: `${h}%` }}
-                className={`w-[3px] rounded-full transition-all duration-150 hover:opacity-100 ${
+                className={`w-[2.5px] rounded-full transition-all duration-150 hover:opacity-100 ${
                   isCurrentHead ? 'scale-y-125' : ''
                 } ${
                   isOutgoing
                     ? hasPlayed
-                      ? 'bg-white dark:bg-[#111214]'
-                      : 'bg-white/35 dark:bg-[#111214]/30'
-                    : hasPlayed
-                    ? 'bg-[#A99BCB] dark:bg-[#B6A4DC]'
-                    : 'bg-neutral-300 dark:bg-neutral-700'
+                    ? 'bg-white dark:bg-[#111214]'
+                    : 'bg-white/35 dark:bg-[#111214]/30'
+                  : hasPlayed
+                  ? 'bg-[#A99BCB] dark:bg-[#B6A4DC]'
+                  : 'bg-neutral-300 dark:bg-neutral-700'
                 }`}
               />
             );
@@ -210,13 +210,13 @@ export const VoiceMessage: React.FC<VoiceMessageProps> = ({
         </div>
 
         {/* Time display & Speed toggle */}
-        <div className="flex items-center justify-between text-[11px] font-mono leading-none opacity-80">
+        <div className="flex items-center justify-between text-[10px] font-mono leading-none opacity-80">
           <span>{currentDisplayTime}</span>
 
           <button
             type="button"
             onClick={cyclePlaybackRate}
-            className="px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-tight hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            className="px-1.5 py-0.5 rounded text-[9.5px] font-semibold tracking-tight hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
             title="Change playback speed"
           >
             {playbackRate}x

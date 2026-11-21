@@ -15,24 +15,24 @@ export const ChatHeader: React.FC<ChatHeaderProps> = () => {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <header className="shrink-0 w-full bg-[#000000] border-b border-[#1A1A1A] safe-pt px-4 py-3 flex items-center justify-between select-none z-50">
+    <header className="shrink-0 w-full bg-[#000000] border-b border-[#1A1A1A] safe-pt px-3.5 py-2.5 flex items-center justify-between select-none z-50">
       {/* Left: Back button & Partner Info */}
-      <div className="flex items-center gap-3.5 min-w-0">
+      <div className="flex items-center gap-3 min-w-0">
         {/* Back arrow */}
         <button
           onClick={() => navigate('/chats')}
           aria-label="Back to conversations"
           className="text-white hover:opacity-80 active:scale-95 transition-all cursor-pointer -ml-1 p-1"
         >
-          <ArrowLeft className="w-6 h-6 stroke-[2]" />
+          <ArrowLeft className="w-5.5 h-5.5 stroke-[2]" />
         </button>
 
-        {/* Circular profile picture (slightly bigger: 46px) */}
+        {/* Circular profile picture (40px) */}
         <div
           onClick={() => navigate('/profile')}
           className="relative cursor-pointer group shrink-0"
         >
-          <div className="w-[46px] h-[46px] rounded-full overflow-hidden border border-neutral-800">
+          <div className="w-[40px] h-[40px] rounded-full overflow-hidden border border-neutral-800">
             <img
               src={partner.avatar}
               alt={partner.name}
@@ -41,21 +41,21 @@ export const ChatHeader: React.FC<ChatHeaderProps> = () => {
           </div>
           {partner.status === 'online' && (
             <span
-              className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-[#35B779] rounded-full ring-2 ring-black"
+              className="absolute bottom-0 right-0 w-3 h-3 bg-[#35B779] rounded-full ring-2 ring-black"
               title="Online"
             />
           )}
         </div>
 
-        {/* Contact username & status (slightly bigger font) */}
+        {/* Contact username & status */}
         <div
           onClick={() => navigate('/profile')}
           className="min-w-0 cursor-pointer flex flex-col justify-center"
         >
-          <h2 className="text-[17px] font-semibold text-white truncate leading-tight tracking-tight">
+          <h2 className="text-[15.5px] font-semibold text-white truncate leading-tight tracking-tight">
             {partner.name}
           </h2>
-          <p className="text-[13px] text-[#737373] leading-tight truncate mt-0.5 font-normal">
+          <p className="text-[12px] text-[#737373] leading-tight truncate mt-0.5 font-normal">
             {partner.status === 'online' ? 'Active now' : partner.lastActive || 'Offline'}
           </p>
         </div>
@@ -69,7 +69,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = () => {
           className="p-1.5 rounded-full hover:bg-[#1A1A1A] active:scale-95 transition-all cursor-pointer text-white"
           title="Menu functions"
         >
-          <Menu className="w-[24px] h-[24px] stroke-[2]" />
+          <Menu className="w-[21px] h-[21px] stroke-[2]" />
         </button>
 
         {showMenu && (

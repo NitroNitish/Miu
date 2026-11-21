@@ -77,22 +77,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isMiddleInGroup = !isFirstInGroup && !isLastInGroup;
   const isSingle = isFirstInGroup && isLastInGroup;
 
-  // Vertical spacing between groups vs consecutive
-  const spacingClass = isFirstInGroup ? 'mt-4' : 'mt-[3px]';
+  // Vertical spacing: same-sender tightly grouped (3–5px gap), sender change slightly more (10–12px)
+  const spacingClass = isFirstInGroup
+    ? index === 0
+      ? 'mt-1'
+      : 'mt-[11px]'
+    : 'mt-[4px]';
 
   // Rounded corners based on grouping
   const getRadiusClasses = () => {
-    if (isSingle) return 'rounded-[24px]';
+    if (isSingle) return 'rounded-[22px]';
     if (isOutgoing) {
-      if (isFirstInGroup) return 'rounded-[24px] rounded-br-[7px]';
-      if (isMiddleInGroup) return 'rounded-[24px] rounded-r-[7px]';
-      if (isLastInGroup) return 'rounded-[24px] rounded-tr-[7px]';
+      if (isFirstInGroup) return 'rounded-[22px] rounded-br-[6px]';
+      if (isMiddleInGroup) return 'rounded-[22px] rounded-r-[6px]';
+      if (isLastInGroup) return 'rounded-[22px] rounded-tr-[6px]';
     } else {
-      if (isFirstInGroup) return 'rounded-[24px] rounded-bl-[7px]';
-      if (isMiddleInGroup) return 'rounded-[24px] rounded-l-[7px]';
-      if (isLastInGroup) return 'rounded-[24px] rounded-tl-[7px]';
+      if (isFirstInGroup) return 'rounded-[22px] rounded-bl-[6px]';
+      if (isMiddleInGroup) return 'rounded-[22px] rounded-l-[6px]';
+      if (isLastInGroup) return 'rounded-[22px] rounded-tl-[6px]';
     }
-    return 'rounded-[24px]';
+    return 'rounded-[22px]';
   };
 
   // Instagram gradient progression: Magenta at top -> Purple -> Violet -> Indigo at bottom
@@ -332,14 +336,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         }}
       >
         <div
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all duration-150 shadow-md ${
+          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 shadow-md ${
             swipeOffset >= 45
               ? 'bg-[#A99BCB] dark:bg-[#B6A4DC] text-[#111214] scale-110 shadow-[0_0_14px_rgba(182,164,220,0.6)] ring-2 ring-white/30'
               : 'bg-[#1E1E22] border border-[#35363C] text-neutral-300'
           }`}
         >
           <Reply
-            className={`w-4 h-4 transition-transform duration-150 ${
+            className={`w-3.5 h-3.5 transition-transform duration-150 ${
               swipeOffset >= 45 ? 'scale-110 -rotate-12' : 'scale-100 rotate-0'
             }`}
           />
@@ -348,39 +352,22 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       {/* Row container with flush alignment */}
       <div
-        className={`flex items-end gap-2.5 max-w-[88%] sm:max-w-[80%] min-w-0 w-fit ${
+        className={`flex max-w-[80%] sm:max-w-[75%] min-w-0 w-fit ${
           isOutgoing ? 'justify-end' : 'justify-start'
         }`}
       >
-        {/* Incoming sender avatar (32px beside last message of group) */}
-        {!isOutgoing && (
-          <div className="w-[32px] shrink-0 flex items-center justify-center">
-            {isLastInGroup ? (
-              <div className="w-[32px] h-[32px] rounded-full overflow-hidden border border-neutral-800 shrink-0">
-                <img
-                  src={partner.avatar}
-                  alt={partner.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="w-[32px]" />
-            )}
-          </div>
-        )}
-
         {/* Main Message Bubble (Instagram-style compact bubble with max-width: 80%, width: fit-content, min-width: 0) */}
         <div
-          className={`relative transition-all shadow-xs max-w-[80%] sm:max-w-[75%] w-fit min-w-0 flex flex-col overflow-hidden break-words ${getRadiusClasses()} ${
+          className={`relative transition-all shadow-xs max-w-full w-fit min-w-0 flex flex-col overflow-hidden break-words ${getRadiusClasses()} ${
             isOutgoing
               ? `${getOutgoingGradient()} text-white`
               : 'bg-[#262626] text-white'
           } ${
             message.type === 'image' || message.type === 'doodle'
               ? 'p-1.5'
-              : 'px-4 py-2.5 sm:px-4.5 sm:py-3'
+              : 'px-3.5 py-2 sm:px-4 sm:py-2.5'
           }`}
-          style={{ maxWidth: '80%', width: 'fit-content', minWidth: 0 }}
+          style={{ maxWidth: '100%', width: 'fit-content', minWidth: 0 }}
         >
           {/* Quoted replied snippet inside the bubble */}
           {message.replyTo && (
@@ -389,7 +376,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 e.stopPropagation();
                 onNavigateToOriginal?.(message.replyTo!.id);
               }}
-              className={`w-full max-w-full min-w-0 box-border mb-2 p-2 sm:p-2.5 rounded-lg border-l-[3px] text-xs cursor-pointer select-none transition-all active:scale-[0.98] overflow-hidden ${
+              className={`w-full max-w-full min-w-0 box-border mb-1.5 p-1.5 sm:p-2 rounded-lg border-l-[3px] text-xs cursor-pointer select-none transition-all active:scale-[0.98] overflow-hidden ${
                 isOutgoing
                   ? 'bg-black/30 hover:bg-black/40 border-white/90 text-white/90 shadow-xs'
                   : 'bg-white/10 hover:bg-white/15 border-[#B6A4DC] text-neutral-200 shadow-xs'
@@ -397,18 +384,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               title="Tap to jump to original message"
             >
-              <div className="flex items-center gap-1.5 mb-1 min-w-0 w-full overflow-hidden">
-                <Reply className={`w-3 h-3 shrink-0 ${isOutgoing ? 'text-white/80' : 'text-[#B6A4DC]'}`} />
-                <span className={`font-semibold text-[11px] truncate tracking-tight min-w-0 ${isOutgoing ? 'text-white' : 'text-[#B6A4DC]'}`}>
+              <div className="flex items-center gap-1.5 mb-0.5 min-w-0 w-full overflow-hidden">
+                <Reply className={`w-2.5 h-2.5 shrink-0 ${isOutgoing ? 'text-white/80' : 'text-[#B6A4DC]'}`} />
+                <span className={`font-semibold text-[10.5px] truncate tracking-tight min-w-0 ${isOutgoing ? 'text-white' : 'text-[#B6A4DC]'}`}>
                   {message.replyTo.sender === 'user' ? 'You' : partner.name}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2 min-w-0 w-full overflow-hidden">
-                <p className="text-[12px] opacity-85 leading-snug flex-1 min-w-0 overflow-hidden line-clamp-2 break-words font-normal">
+                <p className="text-[11px] opacity-85 leading-snug flex-1 min-w-0 overflow-hidden line-clamp-2 break-words font-normal">
                   {message.replyTo.text || 'Original message'}
                 </p>
                 {message.replyTo.mediaUrl && (
-                  <div className="w-8 h-8 rounded-md overflow-hidden shrink-0 border border-white/15 bg-black/40">
+                  <div className="w-7 h-7 rounded-md overflow-hidden shrink-0 border border-white/15 bg-black/40">
                     <img
                       src={message.replyTo.mediaUrl}
                       alt="Quoted media preview"
@@ -421,10 +408,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
           {/* TEXT MESSAGE */}
           {message.type === 'text' && (
-            <div className="text-[16px] leading-[1.38] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px] min-w-0 max-w-full">
+            <div className="text-[15px] leading-[1.35] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px] min-w-0 max-w-full">
               <span>{message.content}</span>
               {message.isEdited && (
-                <span className="ml-1.5 text-[11px] opacity-60 italic">(edited)</span>
+                <span className="ml-1.5 text-[10px] opacity-60 italic">(edited)</span>
               )}
             </div>
           )}
@@ -528,18 +515,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Floating Reaction Pill */}
       {message.reactions && Object.keys(message.reactions).length > 0 && (
         <div
-          className={`flex items-center gap-1 -mt-2.5 z-10 animate-fade-in ${isOutgoing ? 'mr-1 justify-end' : 'ml-10 justify-start'
+          className={`flex items-center gap-1 -mt-2.5 z-10 animate-fade-in ${isOutgoing ? 'mr-1 justify-end' : 'ml-1 justify-start'
             }`}
         >
           {Object.entries(message.reactions).map(([emoji, count]) => (
             <button
               key={emoji}
               onClick={() => addReaction(message.id, emoji)}
-              className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[13px] bg-[#1A1A1A] border border-[#2E2E2E] shadow-sm hover:scale-110 active:scale-95 transition-all duration-150 cursor-pointer"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] bg-[#1A1A1A] border border-[#2E2E2E] shadow-sm hover:scale-110 active:scale-95 transition-all duration-150 cursor-pointer"
             >
               <span className="leading-none">{emoji}</span>
               {count > 1 && (
-                <span className="text-[11px] font-semibold text-neutral-400">
+                <span className="text-[10px] font-semibold text-neutral-400">
                   {count}
                 </span>
               )}
@@ -556,7 +543,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           transition: isDragging ? 'none' : 'opacity 200ms ease',
         }}
       >
-        <span className="text-[11px] sm:text-[12px] font-normal text-[#737373] whitespace-nowrap tabular-nums">
+        <span className="text-[10.5px] sm:text-[11px] font-normal text-[#737373] whitespace-nowrap tabular-nums">
           {message.timestamp}
         </span>
       </div>
@@ -592,7 +579,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Floating Reaction Picker */}
       {showEmojiPicker && (
         <div
-          className={`absolute z-30 -top-12 ${isOutgoing ? 'right-0' : 'left-10'
+          className={`absolute z-30 -top-12 ${isOutgoing ? 'right-0' : 'left-0'
             } flex items-center gap-1.5 p-1.5 bg-[#1A1A1A]/95 backdrop-blur-md border border-[#2E2E2E] rounded-full shadow-2xl animate-slide-up`}
         >
           {quickReactions.map((emoji) => (
