@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { Reply, Trash2, Copy, Smile, Eye, EyeOff, Sparkles, Ban, Edit3, Plus } from 'lucide-react';
 import { Message } from '../../types';
 import { VoiceMessage } from './VoiceMessage';
@@ -40,6 +41,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   isHighlighted = false,
 }) => {
   const { deleteMessage, deleteForEveryone, addReaction, partner } = useChat();
+  const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showFullEmojiLibrary, setShowFullEmojiLibrary] = useState(false);
@@ -352,10 +354,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       {/* Row container with flush alignment */}
       <div
-        className={`flex max-w-[80%] sm:max-w-[75%] min-w-0 w-fit ${
+        className={`flex items-end gap-2 max-w-[85%] sm:max-w-[75%] min-w-0 w-fit ${
           isOutgoing ? 'justify-end' : 'justify-start'
         }`}
       >
+        {/* Incoming sender avatar (little 28px profile picture beside last message of group, Instagram style) */}
+        {!isOutgoing && (
+          <div className="w-7 h-7 shrink-0 flex items-end justify-center self-end mb-0.5">
+            {isLastInGroup ? (
+              <div
+                onClick={() => navigate('/profile')}
+                className="w-7 h-7 rounded-full overflow-hidden border border-neutral-800 shrink-0 cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-xs"
+                title={partner.name}
+              >
+                <img
+                  src={partner.avatar}
+                  alt={partner.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="w-7 h-7" />
+            )}
+          </div>
+        )}
+
         {/* Main Message Bubble (Instagram-style compact bubble with max-width: 80%, width: fit-content, min-width: 0) */}
         <div
           className={`relative transition-all shadow-xs max-w-full w-fit min-w-0 flex flex-col overflow-hidden break-words ${getRadiusClasses()} ${
@@ -515,7 +538,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Floating Reaction Pill */}
       {message.reactions && Object.keys(message.reactions).length > 0 && (
         <div
-          className={`flex items-center gap-1 -mt-2.5 z-10 animate-fade-in ${isOutgoing ? 'mr-1 justify-end' : 'ml-1 justify-start'
+          className={`flex items-center gap-1 -mt-2.5 z-10 animate-fade-in ${isOutgoing ? 'mr-1 justify-end' : 'ml-9 justify-start'
             }`}
         >
           {Object.entries(message.reactions).map(([emoji, count]) => (
@@ -579,7 +602,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       {/* Floating Reaction Picker */}
       {showEmojiPicker && (
         <div
-          className={`absolute z-30 -top-12 ${isOutgoing ? 'right-0' : 'left-0'
+          className={`absolute z-30 -top-12 ${isOutgoing ? 'right-0' : 'left-9'
             } flex items-center gap-1.5 p-1.5 bg-[#1A1A1A]/95 backdrop-blur-md border border-[#2E2E2E] rounded-full shadow-2xl animate-slide-up`}
         >
           {quickReactions.map((emoji) => (
