@@ -264,8 +264,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       onOpenViewOnce(message.id, message.mediaUrl);
     } else if (message.type === 'image' && message.mediaUrl && onOpenMedia) {
       onOpenMedia(message.mediaUrl);
-    } else if (message.type === 'doodle' && message.mediaUrl && onOpenMedia) {
-      onOpenMedia(message.mediaUrl);
     }
   };
 
@@ -386,7 +384,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               ? `${getOutgoingGradient()} text-white`
               : 'bg-[#262626] text-white'
           } ${
-            message.type === 'image' || message.type === 'doodle'
+            message.type === 'image'
               ? 'p-1.5'
               : 'px-3.5 py-2 sm:px-4 sm:py-2.5'
           }`}
@@ -456,24 +454,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   {message.content}
                 </p>
               )}
-            </div>
-          )}
-
-          {/* DOODLE MESSAGE */}
-          {message.type === 'doodle' && message.mediaUrl && (
-            <div
-              onClick={handleBubbleClick}
-              className="cursor-pointer group/doodle relative rounded-[20px] overflow-hidden bg-neutral-900 border border-neutral-800"
-            >
-              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[11px] font-medium flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-[#D91A8E]" />
-                <span>Doodle</span>
-              </div>
-              <img
-                src={message.mediaUrl}
-                alt="Shared doodle"
-                className="w-full max-h-72 object-contain rounded-[20px] p-2 bg-[#000000]"
-              />
             </div>
           )}
 

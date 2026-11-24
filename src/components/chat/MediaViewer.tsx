@@ -1,16 +1,16 @@
 import React, { useEffect } from 'react';
-import { X, Download, Star, Calendar, User, Share2 } from 'lucide-react';
-import { MemoryItem } from '../../types';
+import { X, Download, Calendar, User, Share2 } from 'lucide-react';
+import { MediaItem } from '../../types';
 import { useChat } from '../../context/ChatContext';
 
 interface MediaViewerProps {
-  item: MemoryItem | null;
+  item: MediaItem | null;
   onClose: () => void;
   onShowToast: (msg: string) => void;
 }
 
 export const MediaViewer: React.FC<MediaViewerProps> = ({ item, onClose, onShowToast }) => {
-  const { toggleStarMemory, sendMessage } = useChat();
+  const { sendMessage, partner } = useChat();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,10 +29,9 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ item, onClose, onShowT
   if (!item) return null;
 
   const handleDownload = () => {
-    // Simulate downloading media to device
     const link = document.createElement('a');
     link.href = item.url;
-    link.download = `miu-memory-${item.id}.jpg`;
+    link.download = `miu-media-${item.id}.jpg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -41,8 +40,8 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ item, onClose, onShowT
 
   const handleShareToChat = () => {
     sendMessage({
-      content: item.caption || 'Shared from Memories',
-      type: item.type === 'doodle' ? 'doodle' : 'image',
+      content: item.caption || 'Shared photo',
+      type: 'image',
       mediaUrl: item.url,
     });
     onShowToast('Shared to conversation');
@@ -56,31 +55,17 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ item, onClose, onShowT
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs text-neutral-300 bg-white/10 px-3 py-1 rounded-full">
             <User className="w-3.5 h-3.5 text-neutral-400" />
-            <span>{item.sender === 'user' ? 'You' : 'Elena'}</span>
+            <span>{item.sender === 'user' ? 'You' : (partner?.name || 'Partner')}</span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-neutral-300 bg-white/10 px-3 py-1 rounded-full">
-            <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-            <span>{item.date}</span>
-          </div>
+          {item.date && (
+            <div className="flex items-center gap-1.5 text-xs text-neutral-300 bg-white/10 px-3 py-1 rounded-full">
+              <Calendar className="w-3.5 h-3.5 text-neutral-400" />
+              <span>{item.date}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Star button */}
-          <button
-            onClick={() => {
-              toggleStarMemory(item.id);
-              onShowToast(item.isStarred ? 'Removed from starred' : 'Starred to favorites');
-            }}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
-            title="Star memory"
-          >
-            <Star
-              className={`w-4 h-4 ${
-                item.isStarred ? 'fill-amber-400 text-amber-400' : 'text-white'
-              }`}
-            />
-          </button>
-
           {/* Close button */}
           <button
             onClick={onClose}
@@ -92,11 +77,11 @@ export const MediaViewer: React.FC<MediaViewerProps> = ({ item, onClose, onShowT
         </div>
       </div>
 
-      {/* Main Image or Video Content */}
+      {/* Main Image Content */}
       <div className="flex-1 flex flex-col items-center justify-center max-w-4xl mx-auto w-full p-2 overflow-hidden my-auto">
         <img
           src={item.url}
-          alt={item.caption || 'Memory view'}
+          alt={item.caption || 'Media view'}
           className="max-h-[70vh] max-w-full object-contain rounded-2xl shadow-2xl"
         />
 

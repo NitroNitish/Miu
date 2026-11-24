@@ -14,7 +14,7 @@ import { Toast } from '../components/common/Toast';
 import { Modal } from '../components/common/Modal';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
-import { Message, MemoryItem } from '../types';
+import { Message, MediaItem } from '../types';
 import { ArrowDown, Check, CheckCheck, Sparkles, Shield } from 'lucide-react';
 import {
   getPrivacySettings,
@@ -75,7 +75,7 @@ export const ChatPage: React.FC = () => {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editText, setEditText] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [viewingMedia, setViewingMedia] = useState<MemoryItem | null>(null);
+  const [viewingMedia, setViewingMedia] = useState<MediaItem | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -319,7 +319,6 @@ export const ChatPage: React.FC = () => {
     if (target.type === 'voice') replyText = `🎤 Voice note (${target.duration || 0}s)`;
     else if (target.type === 'image') replyText = '📷 Photo';
     else if (target.type === 'video') replyText = '🎥 Video';
-    else if (target.type === 'doodle') replyText = '✏️ Doodle';
     else if (target.type === 'view_once') replyText = '👁️ View once photo';
 
     return {
@@ -355,7 +354,7 @@ export const ChatPage: React.FC = () => {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
           navigator.vibrate(12);
-        } catch {}
+        } catch { }
       }
     } else {
       setToastMessage('Original message is no longer available');
@@ -439,14 +438,13 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleOpenMedia = (url: string) => {
-    const memoryItem: MemoryItem = {
+    const mediaItem: MediaItem = {
       id: `preview-${Date.now()}`,
-      type: 'photo',
       url,
       date: 'Today',
       sender: 'partner',
     };
-    setViewingMedia(memoryItem);
+    setViewingMedia(mediaItem);
   };
 
   const handleOpenViewOnce = (messageId: string, url: string) => {

@@ -358,8 +358,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   ? '📷 Photo'
                   : replyingTo.type === 'video'
                   ? '🎥 Video'
-                  : replyingTo.type === 'doodle'
-                  ? '✏️ Doodle'
                   : replyingTo.type === 'view_once'
                   ? '👁️ View once photo'
                   : replyingTo.content || 'Message'}

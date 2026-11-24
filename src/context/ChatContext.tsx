@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Message, PartnerProfile, UserProfile, MemoryItem, DailyQuestion } from '../types';
-import { initialMessages, initialPartnerProfile, initialUserProfile, initialMemories, initialDailyQuestions } from '../data/mockData';
+import { Message, PartnerProfile, UserProfile } from '../types';
+import { initialMessages, initialPartnerProfile, initialUserProfile } from '../data/mockData';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
@@ -10,8 +10,6 @@ interface ChatContextType {
   partner: PartnerProfile;
   user: UserProfile;
   isPartnerTyping: boolean;
-  memories: MemoryItem[];
-  dailyQuestions: DailyQuestion[];
   unreadCount: number;
   callState: { isInCall: boolean; type: 'audio' | 'video' | null };
   sendMessage: (data: {
@@ -31,18 +29,14 @@ interface ChatContextType {
   markViewOnceAsViewed: (messageId: string) => void;
   markAllAsRead: () => void;
   clearChat: () => void;
-  answerDailyQuestion: (id: string, answer: string) => void;
-  saveDoodleToMemories: (dataUrl: string, caption?: string) => void;
-  sendDoodleToChat: (dataUrl: string) => void;
   sendQuickInteraction: (type: 'nudge' | 'pulse' | 'music' | 'weather', data?: Record<string, string>) => void;
-  toggleStarMemory: (id: string) => void;
   startCall: (type: 'audio' | 'video') => void;
   endCall: () => void;
   triggerPartnerResponse: (triggerText?: string) => void;
   activeViewOnceMedia: { messageId: string; url: string } | null;
   setActiveViewOnceMedia: (media: { messageId: string; url: string } | null) => void;
   broadcastTyping: (isTyping: boolean) => void;
-  uploadMediaFile: (file: File | Blob, bucket?: 'chat-media' | 'voice-messages' | 'memories') => Promise<string | null>;
+  uploadMediaFile: (file: File | Blob, bucket?: 'chat-media' | 'voice-messages') => Promise<string | null>;
   markChatAsSeen: () => Promise<void>;
 }
 
@@ -79,40 +73,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return messages.filter((m) => m.sender === 'partner' && m.status !== 'seen').length;
   }, [messages]);
 
-  const [memories, setMemories] = useState<MemoryItem[]>(() => {
-    const saved = localStorage.getItem('miu_memories');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.some((m) => m.id === 'mem-1' || m.id === 'mem-2')) {
-          localStorage.removeItem('miu_memories');
-          return [];
-        }
-        return parsed;
-      } catch {
-        return [];
-      }
-    }
-    return initialMemories;
-  });
-
-  const [dailyQuestions, setDailyQuestions] = useState<DailyQuestion[]>(() => {
-    const saved = localStorage.getItem('miu_daily_questions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.some((q) => q.id === 'dq-today' || q.id === 'dq-yesterday')) {
-          localStorage.removeItem('miu_daily_questions');
-          return [];
-        }
-        return parsed;
-      } catch {
-        return [];
-      }
-    }
-    return initialDailyQuestions;
-  });
-
   const [callState, setCallState] = useState<{ isInCall: boolean; type: 'audio' | 'video' | null }>({
     isInCall: false,
     type: null,
@@ -131,14 +91,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('miu_messages');
     }
   }, [messages, isSecondParticipant]);
-
-  useEffect(() => {
-    localStorage.setItem('miu_memories', JSON.stringify(memories));
-  }, [memories]);
-
-  useEffect(() => {
-    localStorage.setItem('miu_daily_questions', JSON.stringify(dailyQuestions));
-  }, [dailyQuestions]);
 
   const getCurrentTime = () => {
     const now = new Date();
@@ -420,7 +372,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Upload media to Supabase Storage
   const uploadMediaFile = async (
     file: File | Blob,
-    bucket: 'chat-media' | 'voice-messages' | 'memories' = 'chat-media'
+    bucket: 'chat-media' | 'voice-messages' = 'chat-media'
   ): Promise<string | null> => {
     if (!isSupabaseConfigured || !authUser) return null;
 
@@ -666,74 +618,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('miu_messages');
   };
 
-  // DAILY QUESTION
-  const answerDailyQuestion = async (id: string, answer: string) => {
-    setDailyQuestions((prev) =>
-      prev.map((q) => {
-        if (q.id === id) {
-          return {
-            ...q,
-            userAnswer: answer,
-            isRevealed: true,
-            answeredAt: `Today, ${getCurrentTime()}`,
-          };
-        }
-        return q;
-      })
-    );
-
-    if (isSupabaseConfigured && authUser) {
-      await supabase.from('daily_answers').insert([
-        {
-          question_id: id,
-          user_id: authUser.id,
-          answer,
-        },
-      ]);
-    }
-
-    sendMessage({
-      content: `Answered today's question: "${answer}"`,
-      type: 'text',
-    });
-  };
-
-  // DOODLES
-  const saveDoodleToMemories = (dataUrl: string, caption = 'Shared canvas sketch') => {
-    const newMemory: MemoryItem = {
-      id: `mem-${Date.now()}`,
-      type: 'doodle',
-      url: dataUrl,
-      caption,
-      date: 'Today',
-      sender: 'user',
-      isStarred: true,
-    };
-    setMemories((prev) => [newMemory, ...prev]);
-
-    if (isSupabaseConfigured && connection && authUser) {
-      supabase.from('memories').insert([
-        {
-          connection_id: connection.id,
-          uploaded_by: authUser.id,
-          media_path: dataUrl,
-          media_type: 'doodle',
-          caption,
-          is_starred: true,
-        },
-      ]);
-    }
-  };
-
-  const sendDoodleToChat = (dataUrl: string) => {
-    saveDoodleToMemories(dataUrl, 'Shared sketch');
-    sendMessage({
-      content: 'Shared a doodle canvas',
-      type: 'doodle',
-      mediaUrl: dataUrl,
-    });
-  };
-
   const sendQuickInteraction = (
     type: 'nudge' | 'pulse' | 'music' | 'weather',
     data?: Record<string, string>
@@ -750,12 +634,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       interactionType: type,
       interactionData: data,
     });
-  };
-
-  const toggleStarMemory = (id: string) => {
-    setMemories((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isStarred: !item.isStarred } : item))
-    );
   };
 
   const startCall = (type: 'audio' | 'video') => {
@@ -800,8 +678,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         partner: authPartner || initialPartnerProfile,
         user: activeUserProfile,
         isPartnerTyping,
-        memories,
-        dailyQuestions,
         unreadCount,
         callState,
         sendMessage,
@@ -812,11 +688,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markViewOnceAsViewed,
         markAllAsRead,
         clearChat,
-        answerDailyQuestion,
-        saveDoodleToMemories,
-        sendDoodleToChat,
         sendQuickInteraction,
-        toggleStarMemory,
         startCall,
         endCall,
         triggerPartnerResponse,

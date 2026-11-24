@@ -2,7 +2,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen';
 
-export type MessageType = 'text' | 'image' | 'video' | 'voice' | 'doodle' | 'view_once' | 'interaction';
+export type MessageType = 'text' | 'image' | 'video' | 'voice' | 'view_once' | 'interaction';
 
 export interface Reaction {
   emoji: string;
@@ -57,27 +57,13 @@ export interface UserProfile {
   phone?: string;
 }
 
-export interface MemoryItem {
+export interface MediaItem {
   id: string;
-  type: 'photo' | 'video' | 'doodle';
   url: string;
-  thumbnailUrl?: string;
+  type?: string;
   caption?: string;
-  date: string;
-  sender: 'user' | 'partner';
-  isStarred?: boolean;
-  duration?: string;
-}
-
-export interface DailyQuestion {
-  id: string;
-  date: string;
-  question: string;
-  category: string;
-  userAnswer?: string;
-  partnerAnswer?: string;
-  answeredAt?: string;
-  isRevealed: boolean;
+  date?: string;
+  sender?: 'user' | 'partner';
 }
 
 export interface Profile {

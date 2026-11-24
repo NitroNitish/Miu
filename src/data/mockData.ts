@@ -1,4 +1,4 @@
-import { PartnerProfile, UserProfile, Message, MemoryItem, DailyQuestion } from '../types';
+import { PartnerProfile, UserProfile, Message } from '../types';
 
 export const initialPartnerProfile: PartnerProfile = {
   id: '',
@@ -20,7 +20,3 @@ export const initialUserProfile: UserProfile = {
 };
 
 export const initialMessages: Message[] = [];
-
-export const initialMemories: MemoryItem[] = [];
-
-export const initialDailyQuestions: DailyQuestion[] = [];
