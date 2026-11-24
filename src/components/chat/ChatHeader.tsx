@@ -15,7 +15,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = () => {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
-    <header className="shrink-0 w-full bg-[#000000] border-b border-[#1A1A1A] safe-pt px-3.5 py-2.5 flex items-center justify-between select-none z-50">
+    <header className="shrink-0 w-full bg-[#000000] border-b border-[#1A1A1A] px-3.5 py-2.5 flex items-center justify-between select-none z-50">
       {/* Left: Back button & Partner Info */}
       <div className="flex items-center gap-3 min-w-0">
         {/* Back arrow */}

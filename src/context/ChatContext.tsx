@@ -195,7 +195,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('conversation_id', conversationId)
           .order('created_at', { ascending: true });
 
-        if (!error && dbMessages) {
+        if (!error && dbMessages && dbMessages.length > 0) {
           // Map for fast reply resolution across conversations
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const msgMap = new Map<string, any>();
@@ -223,7 +223,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
             return ui;
           });
-          setMessages(uiMsgs);
+            setMessages((prev) => {
+              const combined = [...prev, ...uiMsgs];
+              const uniq = new Map<string, any>();
+              combined.forEach((m) => uniq.set(m.id, m));
+              const sorted = Array.from(uniq.values()).sort((a, b) => {
+                const ta = new Date(a.timestamp).getTime();
+                const tb = new Date(b.timestamp).getTime();
+                return ta - tb;
+              });
+              return sorted;
+            });
         }
       } catch (err) {
         console.error('Error loading messages from Supabase:', err);

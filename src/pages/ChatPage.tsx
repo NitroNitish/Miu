@@ -332,9 +332,9 @@ export const ChatPage: React.FC = () => {
   const lastMessageIsOutgoing = lastMessage?.sender === 'user';
 
   return (
-    <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex justify-center overflow-hidden">
+    <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       {/* 751px reference design container */}
-      <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl">
+      <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         <Toast
           message={toastMessage || ''}
           isOpen={!!toastMessage}
