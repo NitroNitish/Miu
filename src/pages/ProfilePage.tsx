@@ -21,6 +21,7 @@ import {
   Copy,
   Link as LinkIcon,
   Unlink,
+  ArrowLeft,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useChat } from '../context/ChatContext';
@@ -148,14 +149,25 @@ export const ProfilePage: React.FC = () => {
       />
 
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#FAF9F7]/90 dark:bg-[#111214]/90 backdrop-blur-md border-b border-[#EEEEEC] dark:border-[#303136] px-4 py-3 safe-pt">
-        <div className="flex items-baseline gap-1.5">
-          <h1 className="text-[27px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5]">
-            miu<span className="text-[#A99BCB] dark:text-[#B6A4DC]">.</span>
-          </h1>
-          <span className="text-[11px] text-[#777777] dark:text-[#999999] font-medium tracking-wider uppercase">
-            Settings
-          </span>
+      <header className="sticky top-0 z-30 bg-[#FAF9F7]/90 dark:bg-[#111214]/90 backdrop-blur-md border-b border-[#EEEEEC] dark:border-[#303136] px-4 py-3 safe-pt flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/chat')}
+            className="p-1.5 -ml-1 rounded-full hover:bg-neutral-200/60 dark:hover:bg-neutral-800 transition-colors text-neutral-700 dark:text-neutral-300 cursor-pointer"
+            title="Back to Chat"
+            aria-label="Back to Chat"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex items-baseline gap-1.5">
+            <h1 className="text-[27px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5]">
+              miu<span className="text-[#A99BCB] dark:text-[#B6A4DC]">.</span>
+            </h1>
+            <span className="text-[11px] text-[#777777] dark:text-[#999999] font-medium tracking-wider uppercase">
+              Settings
+            </span>
+          </div>
         </div>
       </header>
 

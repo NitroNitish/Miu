@@ -9,7 +9,7 @@ import { MagicLockModal } from '../components/chat/MagicLockModal';
 import { MagicPrivacySettingsModal } from '../components/chat/MagicPrivacySettingsModal';
 import { CallModal } from '../components/chat/CallModal';
 import { ViewOnceModal } from '../components/chat/ViewOnceModal';
-import { MediaViewer } from '../components/memories/MediaViewer';
+import { MediaViewer } from '../components/chat/MediaViewer';
 import { Toast } from '../components/common/Toast';
 import { Modal } from '../components/common/Modal';
 import { useChat } from '../context/ChatContext';
