@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { MessageBubble } from '../components/chat/MessageBubble';
@@ -27,6 +27,10 @@ export const ChatPage: React.FC = () => {
   const { connection, isConfigured } = useAuth();
   const {
     messages,
+    hasMoreMessages,
+    isLoadingOlder,
+    isInitialLoading,
+    loadOlderMessages,
     isPartnerTyping,
     sendMessage,
     editMessage,
@@ -191,21 +195,68 @@ export const ChatPage: React.FC = () => {
     }
   }, []);
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
-  };
+  const isNearBottomRef = useRef(true);
+  const prevScrollHeightRef = useRef<number>(0);
+  const prevScrollTopRef = useRef<number>(0);
+  const isPrependingOlderRef = useRef<boolean>(false);
+  const initialScrolledRef = useRef<boolean>(false);
+  const prevMessagesLengthRef = useRef(messages.length);
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  }, []);
+
+  // Initial scroll to bottom when conversation opens or initial messages load
   useEffect(() => {
-    if (isMagicLayerOpen) {
+    if (isMagicLayerOpen && messages.length > 0 && !initialScrolledRef.current) {
       scrollToBottom('auto');
+      initialScrolledRef.current = true;
+    }
+  }, [isMagicLayerOpen, messages.length, scrollToBottom]);
+
+  // Reset initialScrolledRef when Magic Layer closes
+  useEffect(() => {
+    if (!isMagicLayerOpen) {
+      initialScrolledRef.current = false;
     }
   }, [isMagicLayerOpen]);
 
+  // Preserve exact scroll position after prepending older messages
+  useLayoutEffect(() => {
+    if (isPrependingOlderRef.current && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      const newScrollHeight = container.scrollHeight;
+      const heightDifference = newScrollHeight - prevScrollHeightRef.current;
+      container.scrollTop = prevScrollTopRef.current + heightDifference;
+      isPrependingOlderRef.current = false;
+    }
+  }, [messages]);
+
+  // Handle incoming/outgoing messages:
+  // Only scroll to bottom if user is already near bottom OR latest message is outgoing!
   useEffect(() => {
-    if (isMagicLayerOpen) {
+    if (!isMagicLayerOpen) return;
+    if (isPrependingOlderRef.current) return;
+
+    const isNewMessageAdded = messages.length > prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = messages.length;
+
+    if (isNewMessageAdded && messages.length > 0) {
+      const latestMessage = messages[messages.length - 1];
+      const isOutgoing = latestMessage.sender === 'user';
+
+      if (isOutgoing || isNearBottomRef.current) {
+        scrollToBottom('smooth');
+      }
+    }
+  }, [messages, isMagicLayerOpen, scrollToBottom]);
+
+  // Scroll to bottom when partner is typing (only if near bottom)
+  useEffect(() => {
+    if (isMagicLayerOpen && isPartnerTyping && isNearBottomRef.current) {
       scrollToBottom('smooth');
     }
-  }, [messages.length, isPartnerTyping, isMagicLayerOpen]);
+  }, [isPartnerTyping, isMagicLayerOpen, scrollToBottom]);
 
   // 5. PRIVACY-CONTROLLED READ RECEIPTS:
   // Only mark as seen if shareReadReceipts is enabled
@@ -216,10 +267,26 @@ export const ChatPage: React.FC = () => {
   }, [isMagicLayerOpen, markChatAsSeen, messages.length, privacySettings.shareReadReceipts]);
 
   const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+    isNearBottomRef.current = isNearBottom;
     setShowScrollBottom(!isNearBottom);
+
+    // Fetch older messages when user scrolls near top (< 90px)
+    if (scrollTop < 90 && hasMoreMessages && !isLoadingOlder && !isPrependingOlderRef.current) {
+      prevScrollHeightRef.current = container.scrollHeight;
+      prevScrollTopRef.current = container.scrollTop;
+      isPrependingOlderRef.current = true;
+
+      loadOlderMessages().then((loaded) => {
+        if (!loaded) {
+          isPrependingOlderRef.current = false;
+        }
+      });
+    }
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -522,25 +589,56 @@ export const ChatPage: React.FC = () => {
           onMouseLeave={handleMouseUp}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3.5 py-2.5 flex flex-col relative no-scrollbar touch-pan-y overscroll-contain"
         >
-          {/* Top Encrypted Presence Card */}
-          <div className="flex flex-col items-center justify-center my-5 text-center select-none">
-            <div className="w-[74px] h-[74px] rounded-full overflow-hidden border-2 border-neutral-800 mb-2">
-              <img
-                src={partner.avatar}
-                alt={partner.name}
-                className="w-full h-full object-cover"
-              />
+          {/* Subtle loading indicator when fetching older messages */}
+          {isLoadingOlder && (
+            <div className="py-2.5 flex items-center justify-center gap-2 text-xs text-neutral-400 select-none animate-fade-in shrink-0">
+              <div className="w-3.5 h-3.5 border-2 border-[#B6A4DC] border-t-transparent rounded-full animate-spin" />
+              <span>Loading older messages...</span>
             </div>
-            <h3 className="text-[16.5px] font-semibold text-white tracking-tight">
-              {partner.name}
-            </h3>
-            <p className="text-[12px] text-[#737373] mt-0.5">
-              Magic Layer • End-to-end encrypted
-            </p>
-            <div className="mt-3 px-3 py-0.5 rounded-full bg-[#1A1A1A] text-[11px] text-[#8E8E8E] font-medium">
-              Today
+          )}
+
+          {/* Top Encrypted Presence Card: Only displayed at the very beginning of conversation */}
+          {!hasMoreMessages && !isInitialLoading && (
+            <div className="flex flex-col items-center justify-center my-5 text-center select-none animate-fade-in shrink-0">
+              <div className="w-[74px] h-[74px] rounded-full overflow-hidden border-2 border-neutral-800 mb-2">
+                <img
+                  src={partner.avatar}
+                  alt={partner.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <h3 className="text-[16.5px] font-semibold text-white tracking-tight">
+                {partner.name}
+              </h3>
+              <p className="text-[12px] text-[#737373] mt-0.5">
+                Magic Layer • End-to-end encrypted
+              </p>
+              <div className="mt-3 px-3 py-0.5 rounded-full bg-[#1A1A1A] text-[11px] text-[#8E8E8E] font-medium">
+                Beginning of conversation
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Initial loading spinner */}
+          {isInitialLoading && (
+            <div className="my-auto py-12 flex flex-col items-center justify-center text-center select-none">
+              <div className="w-5 h-5 border-2 border-[#B6A4DC] border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-xs text-neutral-400">Loading conversation...</p>
+            </div>
+          )}
+
+          {/* Empty Conversation State */}
+          {messages.length === 0 && !isInitialLoading && (
+            <div className="my-auto py-12 flex flex-col items-center justify-center text-center select-none px-4 animate-fade-in">
+              <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-neutral-400 mb-3">
+                <Sparkles className="w-5 h-5 text-[#B6A4DC]" />
+              </div>
+              <p className="text-sm font-medium text-white">No messages</p>
+              <p className="text-xs text-neutral-400 mt-1 max-w-xs leading-relaxed">
+                This private space is synchronized. Send a message to start chatting.
+              </p>
+            </div>
+          )}
 
           {/* Awaiting connection prompt if user is in configured Supabase mode but hasn't paired yet */}
           {isConfigured && !connection && (

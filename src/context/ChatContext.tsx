@@ -1,12 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Message, PartnerProfile, UserProfile } from '../types';
-import { initialMessages, initialPartnerProfile, initialUserProfile } from '../data/mockData';
+import { initialPartnerProfile, initialUserProfile } from '../data/mockData';
 import { useAuth } from './AuthContext';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
+const PAGE_SIZE = 30;
+
 interface ChatContextType {
   messages: Message[];
+  hasMoreMessages: boolean;
+  isLoadingOlder: boolean;
+  isInitialLoading: boolean;
+  loadOlderMessages: () => Promise<boolean>;
   partner: PartnerProfile;
   user: UserProfile;
   isPartnerTyping: boolean;
@@ -45,29 +51,15 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user: authUser, connection, partner: authPartner, updatePartnerStatus } = useAuth();
 
-  // Dual Retention Rule: If user is second participant (user_two_id), do not persist chat in localStorage
-  const isSecondParticipant = connection && authUser && connection.user_two_id === authUser.id;
-
-  const [messages, setMessages] = useState<Message[]>(() => {
-    if (isSecondParticipant) return [];
-    const saved = localStorage.getItem('miu_messages');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.some((m) => m.id === 'msg-1' || m.id === 'msg-12')) {
-          localStorage.removeItem('miu_messages');
-          return [];
-        }
-        return parsed;
-      } catch {
-        return [];
-      }
-    }
-    return initialMessages;
-  });
+  // Supabase is the single source of truth.
+  // We do not cache or restore messages from localStorage to avoid stale deleted ghost messages.
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState<boolean>(true);
+  const [isLoadingOlder, setIsLoadingOlder] = useState<boolean>(false);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
 
   const [isPartnerTyping, setIsPartnerTyping] = useState<boolean>(false);
-  
+
   // Unread count is reactively calculated from unseen incoming partner messages
   const unreadCount = useMemo(() => {
     return messages.filter((m) => m.sender === 'partner' && m.status !== 'seen').length;
@@ -81,16 +73,28 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeViewOnceMedia, setActiveViewOnceMedia] = useState<{ messageId: string; url: string } | null>(null);
 
   const presenceChannelRef = useRef<RealtimeChannel | null>(null);
+  const messageChannelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Synchronize localStorage according to Phase 10 Retention Rules
+  // Refs for tracking active state during async operations
+  const activeConversationIdRef = useRef<string | null>(null);
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
+
+  const hasMoreRef = useRef<boolean>(hasMoreMessages);
+  hasMoreRef.current = hasMoreMessages;
+
+  const isLoadingOlderRef = useRef<boolean>(isLoadingOlder);
+  isLoadingOlderRef.current = isLoadingOlder;
+
+  // Clean up legacy localStorage key once on mount
   useEffect(() => {
-    if (!isSecondParticipant) {
-      localStorage.setItem('miu_messages', JSON.stringify(messages));
-    } else {
+    try {
       localStorage.removeItem('miu_messages');
+    } catch {
+      // Ignore storage errors in restricted contexts
     }
-  }, [messages, isSecondParticipant]);
+  }, []);
 
   const getCurrentTime = () => {
     const now = new Date();
@@ -102,7 +106,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (m: any): Message => {
       const isSender = authUser ? m.sender_id === authUser.id : m.sender_id === 'user';
-      const createdDate = new Date(m.created_at || Date.now());
+      const isoCreated = m.created_at || new Date().toISOString();
+      const createdDate = new Date(isoCreated);
       const timeStr = createdDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
       return {
@@ -114,6 +119,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         duration: m.duration,
         timestamp: timeStr,
         date: 'Today',
+        createdAt: isoCreated,
         status: m.seen_at ? 'seen' : m.delivered_at ? 'delivered' : 'sent',
         replyTo: m.reply_to_id
           ? {
@@ -132,69 +138,98 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [authUser]
   );
 
-  // Load Realtime Messages and Presence from Supabase
+  // Load Initial Messages and Setup Realtime for the Active Conversation
   useEffect(() => {
-    if (!isSupabaseConfigured || !connection?.conversation_id || !authUser) return;
+    if (!isSupabaseConfigured || !connection?.conversation_id || !authUser) {
+      setMessages([]);
+      setIsInitialLoading(false);
+      setHasMoreMessages(false);
+      return;
+    }
 
     const conversationId = connection.conversation_id;
+    activeConversationIdRef.current = conversationId;
 
-    // 1. Fetch initial message history
-    const loadConversation = async () => {
+    // Immediately reset state for conversation switching so old messages never bleed through
+    setMessages([]);
+    setIsInitialLoading(true);
+    setHasMoreMessages(true);
+
+    // 1. Fetch initial message history (latest 30 messages)
+    const loadInitialConversation = async () => {
       try {
         const { data: dbMessages, error } = await supabase
           .from('messages')
           .select('*')
           .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: false })
+          .limit(PAGE_SIZE);
 
-        if (!error && dbMessages && dbMessages.length > 0) {
-          // Map for fast reply resolution across conversations
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const msgMap = new Map<string, any>();
-          dbMessages.forEach((m) => msgMap.set(m.id, m));
+        // Guard against race conditions if conversation switched while request was in-flight
+        if (activeConversationIdRef.current !== conversationId) return;
 
-          const uiMsgs = dbMessages.map((m) => {
-            const ui = dbMessageToUI(m);
-            if (m.reply_to_id && msgMap.has(m.reply_to_id)) {
-              const orig = msgMap.get(m.reply_to_id);
-              const origIsSender = authUser ? orig.sender_id === authUser.id : orig.sender_id === 'user';
-              let origText = orig.content || '';
-              if (orig.message_type === 'voice') origText = `🎤 Voice note (${orig.duration || 0}s)`;
-              else if (orig.message_type === 'image') origText = '📷 Photo';
-              else if (orig.message_type === 'video') origText = '🎥 Video';
-              else if (orig.message_type === 'doodle') origText = '✏️ Doodle';
-              else if (orig.message_type === 'view_once') origText = '👁️ View once photo';
-
-              ui.replyTo = {
-                id: orig.id,
-                sender: origIsSender ? 'user' : 'partner',
-                text: origText || 'Original message',
-                mediaUrl: orig.media_path,
-                type: orig.message_type,
-              };
-            }
-            return ui;
-          });
-            setMessages((prev) => {
-              const combined = [...prev, ...uiMsgs];
-              const uniq = new Map<string, any>();
-              combined.forEach((m) => uniq.set(m.id, m));
-              const sorted = Array.from(uniq.values()).sort((a, b) => {
-                const ta = new Date(a.timestamp).getTime();
-                const tb = new Date(b.timestamp).getTime();
-                return ta - tb;
-              });
-              return sorted;
-            });
+        if (error) {
+          console.error('Error loading messages from Supabase:', error);
+          setMessages([]);
+          setIsInitialLoading(false);
+          setHasMoreMessages(false);
+          return;
         }
+
+        // Supabase is single source of truth: if database has 0 rows, UI has 0 messages
+        if (!dbMessages || dbMessages.length === 0) {
+          setMessages([]);
+          setHasMoreMessages(false);
+          setIsInitialLoading(false);
+          return;
+        }
+
+        // Reverse latest 30 to chronological ascending order (oldest -> newest)
+        const chronological = dbMessages.slice().reverse();
+
+        // Build reply map for quick lookup
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const msgMap = new Map<string, any>();
+        chronological.forEach((m) => msgMap.set(m.id, m));
+
+        const uiMsgs = chronological.map((m) => {
+          const ui = dbMessageToUI(m);
+          if (m.reply_to_id && msgMap.has(m.reply_to_id)) {
+            const orig = msgMap.get(m.reply_to_id);
+            const origIsSender = authUser ? orig.sender_id === authUser.id : orig.sender_id === 'user';
+            let origText = orig.content || '';
+            if (orig.message_type === 'voice') origText = `🎤 Voice note (${orig.duration || 0}s)`;
+            else if (orig.message_type === 'image') origText = '📷 Photo';
+            else if (orig.message_type === 'video') origText = '🎥 Video';
+            else if (orig.message_type === 'view_once') origText = '👁️ View once photo';
+
+            ui.replyTo = {
+              id: orig.id,
+              sender: origIsSender ? 'user' : 'partner',
+              text: origText || 'Original message',
+              mediaUrl: orig.media_path,
+              type: orig.message_type,
+            };
+          }
+          return ui;
+        });
+
+        setMessages(uiMsgs);
+        setHasMoreMessages(dbMessages.length === PAGE_SIZE);
+        setIsInitialLoading(false);
       } catch (err) {
-        console.error('Error loading messages from Supabase:', err);
+        console.error('Unexpected error loading conversation:', err);
+        if (activeConversationIdRef.current === conversationId) {
+          setMessages([]);
+          setIsInitialLoading(false);
+          setHasMoreMessages(false);
+        }
       }
     };
 
-    loadConversation();
+    loadInitialConversation();
 
-    // 2. Setup Postgres Changes Realtime Subscription
+    // 2. Setup Postgres Changes Realtime Subscription for incremental updates
     const messageChannel = supabase
       .channel(`chat_messages_${conversationId}`)
       .on(
@@ -206,17 +241,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
+          if (activeConversationIdRef.current !== conversationId) return;
+
           if (payload.eventType === 'INSERT') {
             const incoming = dbMessageToUI(payload.new);
             setMessages((prev) => {
-              if (prev.some((x) => x.id === incoming.id)) return prev;
+              // Deduplicate by message ID
+              const existingIdx = prev.findIndex((x) => x.id === incoming.id);
+              if (existingIdx >= 0) {
+                const next = [...prev];
+                next[existingIdx] = incoming;
+                return next;
+              }
+
+              // Resolve reply if available in existing messages
               if (payload.new.reply_to_id) {
                 const orig = prev.find((m) => m.id === payload.new.reply_to_id);
                 if (orig) {
                   incoming.replyTo = {
                     id: orig.id,
                     sender: orig.sender,
-                    text: orig.content || (orig.type === 'voice' ? 'Voice note' : 'Media message'),
+                    text: orig.content || (orig.type === 'voice' ? 'Voice note' : 'Photo'),
                     mediaUrl: orig.mediaUrl,
                     type: orig.type,
                   };
@@ -233,6 +278,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       )
       .subscribe();
+
+    messageChannelRef.current = messageChannel;
 
     const partnerId = connection
       ? connection.user_one_id === authUser.id
@@ -264,7 +311,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    // 3. Setup Broadcast & Presence Channel (Typing, Online status, Seen receipts)
+    // 3. Setup Broadcast & Presence Channel
     const presenceChannel = supabase.channel(`chat_presence_${conversationId}`, {
       config: { presence: { key: authUser.id } },
     });
@@ -357,7 +404,87 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [connection, authUser, dbMessageToUI, updatePartnerStatus]);
+  }, [connection?.conversation_id, authUser, dbMessageToUI, updatePartnerStatus]);
+
+  // Cursor-based Pagination: Fetch 30 older messages when scrolling to top
+  const loadOlderMessages = useCallback(async (): Promise<boolean> => {
+    if (!isSupabaseConfigured || !connection?.conversation_id || !authUser) return false;
+    if (isLoadingOlderRef.current || !hasMoreRef.current) return false;
+
+    const conversationId = connection.conversation_id;
+    const currentMsgs = messagesRef.current;
+
+    // Find the earliest createdAt in the currently loaded list
+    const oldestMsg = currentMsgs.find((m) => !!m.createdAt);
+    if (!oldestMsg?.createdAt) {
+      setHasMoreMessages(false);
+      return false;
+    }
+
+    isLoadingOlderRef.current = true;
+    setIsLoadingOlder(true);
+
+    try {
+      const { data: olderDbMessages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .lt('created_at', oldestMsg.createdAt)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE);
+
+      // Check if conversation switched while fetching
+      if (activeConversationIdRef.current !== conversationId) {
+        return false;
+      }
+
+      if (error) {
+        console.error('Error fetching older messages from Supabase:', error);
+        return false;
+      }
+
+      if (!olderDbMessages || olderDbMessages.length === 0) {
+        setHasMoreMessages(false);
+        return false;
+      }
+
+      if (olderDbMessages.length < PAGE_SIZE) {
+        setHasMoreMessages(false);
+      }
+
+      // Reverse older messages so they are chronological
+      const chronologicalOlder = olderDbMessages.slice().reverse();
+      const olderUiMsgs = chronologicalOlder.map((m) => dbMessageToUI(m));
+
+      // Resolve replies
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allMsgsMap = new Map<string, any>();
+      [...olderDbMessages, ...messagesRef.current].forEach((m) => allMsgsMap.set(m.id, m));
+      olderUiMsgs.forEach((ui) => {
+        if (ui.replyTo?.id && allMsgsMap.has(ui.replyTo.id)) {
+          const orig = allMsgsMap.get(ui.replyTo.id);
+          ui.replyTo.text = orig.content || (orig.message_type === 'voice' ? 'Voice note' : 'Photo');
+          ui.replyTo.mediaUrl = orig.media_path || orig.mediaUrl;
+        }
+      });
+
+      // Deduplicate and prepend to current message list
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const uniqueOlder = olderUiMsgs.filter((m) => !existingIds.has(m.id));
+        if (uniqueOlder.length === 0) return prev;
+        return [...uniqueOlder, ...prev];
+      });
+
+      return true;
+    } catch (err) {
+      console.error('Failed to load older messages:', err);
+      return false;
+    } finally {
+      isLoadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  }, [connection?.conversation_id, authUser, dbMessageToUI]);
 
   // Broadcast typing status
   const broadcastTyping = (isTyping: boolean) => {
@@ -413,6 +540,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     duration?: number;
   }) => {
     const tempId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const nowIso = new Date().toISOString();
     const newMsg: Message = {
       id: tempId,
       sender: 'user',
@@ -424,6 +552,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isViewed: false,
       timestamp: getCurrentTime(),
       date: 'Today',
+      createdAt: nowIso,
       status: 'sending',
       replyTo,
     };
@@ -452,7 +581,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .single();
 
         if (!error && inserted) {
-          // Replace tempId with actual server message, keeping replyTo details
+          // Replace tempId with server authoritative message
           setMessages((prev) =>
             prev.map((m) =>
               m.id === tempId ? { ...dbMessageToUI(inserted), status: 'sent', replyTo } : m
@@ -465,12 +594,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Local / Offline fallback simulation (transitions to 'sent', never to 'seen' automatically)
+    // Local fallback transition
     setTimeout(() => {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, status: 'sent' } : m))
       );
-    }, 400);
+    }, 300);
   };
 
   // EDIT MESSAGE
@@ -490,12 +619,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // DELETE FOR ME
+  // DELETE FOR ME (Synchronize immediately in UI)
   const deleteMessage = async (id: string) => {
     setMessages((prev) => prev.filter((msg) => msg.id !== id));
   };
 
-  // DELETE FOR EVERYONE
+  // DELETE FOR EVERYONE (Synchronize immediately in UI & Supabase)
   const deleteForEveryone = async (id: string) => {
     setMessages((prev) =>
       prev.map((msg) =>
@@ -615,7 +744,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearChat = () => {
     setMessages([]);
-    localStorage.removeItem('miu_messages');
+    try {
+      localStorage.removeItem('miu_messages');
+    } catch {
+      // Ignore
+    }
   };
 
   const sendQuickInteraction = (
@@ -656,6 +789,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         content: reply,
         timestamp: getCurrentTime(),
         date: 'Today',
+        createdAt: new Date().toISOString(),
         status: 'seen',
       };
       setMessages((prev) => [...prev, newMsg]);
@@ -675,6 +809,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <ChatContext.Provider
       value={{
         messages,
+        hasMoreMessages,
+        isLoadingOlder,
+        isInitialLoading,
+        loadOlderMessages,
         partner: authPartner || initialPartnerProfile,
         user: activeUserProfile,
         isPartnerTyping,

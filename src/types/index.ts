@@ -20,6 +20,7 @@ export interface Message {
   duration?: number; // for audio/video in seconds
   timestamp: string; // e.g. "9:41 AM"
   date: string; // e.g. "2026-11-18"
+  createdAt?: string; // ISO 8601 timestamp from database for sorting and cursor pagination
   status: MessageStatus;
   replyTo?: {
     id: string;
