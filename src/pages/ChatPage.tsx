@@ -4,6 +4,7 @@ import { ChatHeader } from '../components/chat/ChatHeader';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
 import { TypingIndicator } from '../components/chat/TypingIndicator';
+import { MagicLayer } from '../components/chat/MagicLayer';
 import { CallModal } from '../components/chat/CallModal';
 import { ViewOnceModal } from '../components/chat/ViewOnceModal';
 import { MediaViewer } from '../components/memories/MediaViewer';
@@ -237,7 +238,27 @@ export const ChatPage: React.FC = () => {
     }
   };
 
+  const [magicMode, setMagicMode] = useState(false);
+  const [magicLockEnabled, setMagicLockEnabled] = useState(false);
+  const [pin, setPin] = useState('');
+
   const handleSendMessage = (text: string) => {
+    const trimmed = text.trim();
+    // Secret command to enter Magic Layer
+    if (trimmed === '/qupa') {
+      // Optional: Prompt for PIN if lock enabled
+      if (magicLockEnabled && pin) {
+        const entered = prompt('Enter PIN to access Magic Layer');
+        if (entered !== pin) {
+          setToastMessage('Incorrect PIN');
+          return;
+        }
+      }
+      setMagicMode(true);
+      setToastMessage('Entered Magic Layer');
+      return; // Do not send to chat
+    }
+    // Normal message flow
     sendMessage({
       content: text,
       type: 'text',
@@ -331,10 +352,14 @@ export const ChatPage: React.FC = () => {
   const lastMessage = messages[messages.length - 1];
   const lastMessageIsOutgoing = lastMessage?.sender === 'user';
 
-  return (
-    <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      {/* 751px reference design container */}
-      <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+if (magicMode) {
+  return <MagicLayer onExit={() => setMagicMode(false)} />;
+}
+
+return (
+  <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    {/* 751px reference design container */}
+    <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         <Toast
           message={toastMessage || ''}
           isOpen={!!toastMessage}
