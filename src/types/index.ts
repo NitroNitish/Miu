@@ -34,7 +34,7 @@ export interface Message {
   isViewed?: boolean;
   isDeletedForEveryone?: boolean;
   isEdited?: boolean;
-  interactionType?: 'nudge' | 'pulse' | 'music' | 'weather';
+  interactionType?: 'nudge' | 'pulse' | 'music' | 'weather' | 'ai';
   interactionData?: Record<string, string>;
 }
 

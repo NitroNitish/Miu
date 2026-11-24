@@ -110,9 +110,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const createdDate = new Date(isoCreated);
       const timeStr = createdDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+      // Extract metadata stored in reactions JSONB
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawReactions = (m.reactions || {}) as Record<string, any>;
+      const meta = rawReactions._meta;
+      const cleanReactions = { ...rawReactions };
+      delete cleanReactions._meta;
+
+      const interactionType = meta?.interactionType || (m.message_type === 'interaction' ? 'ai' : undefined);
+      const interactionData = meta?.interactionData;
+      const isAi = interactionType === 'ai';
+
       return {
         id: m.id,
-        sender: isSender ? 'user' : 'partner',
+        sender: isAi ? 'partner' : isSender ? 'user' : 'partner',
         type: m.message_type || 'text',
         content: m.content || '',
         mediaUrl: m.media_path,
@@ -128,11 +139,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               text: 'Original message',
             }
           : undefined,
-        reactions: m.reactions || {},
+        reactions: cleanReactions,
         isViewOnce: m.is_view_once,
         isViewed: m.is_viewed,
         isDeletedForEveryone: m.deleted_for_everyone,
         isEdited: !!m.edited_at,
+        interactionType,
+        interactionData,
       };
     },
     [authUser]
@@ -529,6 +542,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isViewOnce = false,
     replyTo,
     duration,
+    interactionType,
+    interactionData,
   }: {
     content: string;
     type?: Message['type'];
@@ -541,10 +556,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }) => {
     const tempId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const nowIso = new Date().toISOString();
+    const isAi = interactionType === 'ai';
     const newMsg: Message = {
       id: tempId,
-      sender: 'user',
-      type,
+      sender: isAi ? 'partner' : 'user',
+      type: interactionType ? 'interaction' : type,
       content,
       mediaUrl,
       duration,
@@ -555,6 +571,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: nowIso,
       status: 'sending',
       replyTo,
+      interactionType,
+      interactionData,
     };
 
     // 1. Optimistic UI insertion
@@ -563,18 +581,28 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 2. Persist to Supabase if configured and connected
     if (isSupabaseConfigured && connection?.conversation_id && authUser) {
       try {
+        const reactionsPayload = interactionType
+          ? {
+              _meta: {
+                interactionType,
+                interactionData,
+              },
+            }
+          : null;
+
         const { data: inserted, error } = await supabase
           .from('messages')
           .insert([
             {
               conversation_id: connection.conversation_id,
               sender_id: authUser.id,
-              message_type: type,
+              message_type: interactionType ? 'interaction' : type,
               content,
               media_path: mediaUrl,
               duration,
               is_view_once: isViewOnce,
               reply_to_id: replyTo?.id,
+              reactions: reactionsPayload,
             },
           ])
           .select()

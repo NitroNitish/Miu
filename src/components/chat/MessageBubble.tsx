@@ -356,10 +356,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           isOutgoing ? 'justify-end' : 'justify-start'
         }`}
       >
-        {/* Incoming sender avatar (little 28px profile picture beside last message of group, Instagram style) */}
+        {/* Incoming sender avatar (little 28px profile picture beside last message of group, or miu. AI avatar) */}
         {!isOutgoing && (
           <div className="w-7 h-7 shrink-0 flex items-end justify-center self-end mb-0.5">
-            {isLastInGroup ? (
+            {message.interactionType === 'ai' ? (
+              <div
+                className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#7E22CE] to-[#B6A4DC] flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(182,164,220,0.4)] border border-[#B6A4DC]/40"
+                title="miu. AI"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-white" />
+              </div>
+            ) : isLastInGroup ? (
               <div
                 onClick={() => navigate('/profile')}
                 className="w-7 h-7 rounded-full overflow-hidden border border-neutral-800 shrink-0 cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-xs"
@@ -377,11 +384,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           </div>
         )}
 
-        {/* Main Message Bubble (Instagram-style compact bubble with max-width: 80%, width: fit-content, min-width: 0) */}
+        {/* Main Message Bubble (Instagram-style compact bubble or AI response bubble) */}
         <div
           className={`relative transition-all shadow-xs max-w-full w-fit min-w-0 flex flex-col overflow-hidden break-words ${getRadiusClasses()} ${
             isOutgoing
               ? `${getOutgoingGradient()} text-white`
+              : message.interactionType === 'ai'
+              ? 'bg-gradient-to-br from-[#1C1A24] via-[#16151E] to-[#111116] border border-[#B6A4DC]/30 text-white shadow-[0_4px_24px_rgba(0,0,0,0.5)]'
               : 'bg-[#262626] text-white'
           } ${
             message.type === 'image'
@@ -390,6 +399,23 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           }`}
           style={{ maxWidth: '100%', width: 'fit-content', minWidth: 0 }}
         >
+          {/* AI Header for /miu responses */}
+          {message.interactionType === 'ai' && (
+            <div className="flex items-center gap-1.5 pb-1.5 mb-1.5 border-b border-white/10 select-none">
+              <div className="w-4 h-4 rounded-full bg-[#B6A4DC]/20 flex items-center justify-center">
+                <Sparkles className="w-2.5 h-2.5 text-[#B6A4DC]" />
+              </div>
+              <span className="text-[11px] font-semibold tracking-wider text-[#B6A4DC] uppercase">
+                miu. AI
+              </span>
+              {message.interactionData?.prompt && (
+                <span className="text-[10.5px] text-neutral-400 truncate max-w-[200px] italic">
+                  "{message.interactionData.prompt}"
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Quoted replied snippet inside the bubble */}
           {message.replyTo && (
             <div
@@ -427,9 +453,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </div>
             </div>
           )}
-          {/* TEXT MESSAGE */}
-          {message.type === 'text' && (
-            <div className="text-[15px] leading-[1.35] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px] min-w-0 max-w-full">
+          {/* TEXT OR INTERACTION/AI MESSAGE */}
+          {(message.type === 'text' || message.type === 'interaction') && (
+            <div className="text-[15px] leading-[1.4] select-text whitespace-pre-wrap break-words font-normal tracking-[-0.1px] min-w-0 max-w-full">
               <span>{message.content}</span>
               {message.isEdited && (
                 <span className="ml-1.5 text-[10px] opacity-60 italic">(edited)</span>

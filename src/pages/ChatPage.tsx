@@ -16,6 +16,7 @@ import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
 import { Message, MediaItem } from '../types';
 import { ArrowDown, Check, CheckCheck, Sparkles, Shield } from 'lucide-react';
+import { askGemini, ChatHistoryItem } from '../lib/gemini';
 import {
   getPrivacySettings,
   savePrivacySettings,
@@ -82,6 +83,7 @@ export const ChatPage: React.FC = () => {
   const [viewingMedia, setViewingMedia] = useState<MediaItem | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [isAiResponding, setIsAiResponding] = useState(false);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Swipe to reveal timestamps state & gesture tracking
@@ -251,12 +253,12 @@ export const ChatPage: React.FC = () => {
     }
   }, [messages, isMagicLayerOpen, scrollToBottom]);
 
-  // Scroll to bottom when partner is typing (only if near bottom)
+  // Scroll to bottom when partner or miu. AI is typing (only if near bottom)
   useEffect(() => {
-    if (isMagicLayerOpen && isPartnerTyping && isNearBottomRef.current) {
+    if (isMagicLayerOpen && (isPartnerTyping || isAiResponding) && isNearBottomRef.current) {
       scrollToBottom('smooth');
     }
-  }, [isPartnerTyping, isMagicLayerOpen, scrollToBottom]);
+  }, [isPartnerTyping, isAiResponding, isMagicLayerOpen, scrollToBottom]);
 
   // 5. PRIVACY-CONTROLLED READ RECEIPTS:
   // Only mark as seen if shareReadReceipts is enabled
@@ -428,7 +430,63 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
+    const trimmed = text.trim();
+
+    // /miu AI Command support in hidden Magic Layer chat
+    if (trimmed.startsWith('/miu')) {
+      const query = trimmed.replace(/^\/miu\s*/, '').trim();
+
+      // If user typed /miu without a query, show instructional helper
+      if (!query) {
+        sendMessage({
+          content: '💡 **Ask miu. AI**:\nUse `/miu <your question>` to ask anything! For example:\n• `/miu Recommend a fun movie for tonight`\n• `/miu What is quantum computing?`\n• `/miu Write a sweet short message`',
+          type: 'interaction',
+          interactionType: 'ai',
+        });
+        setReplyingTo(null);
+        return;
+      }
+
+      // Send the user's prompt into the conversation
+      await sendMessage({
+        content: text,
+        type: 'text',
+        replyTo: getReplyPayload(replyingTo),
+      });
+      setReplyingTo(null);
+
+      // Start AI response flow
+      setIsAiResponding(true);
+      try {
+        const history: ChatHistoryItem[] = messages.slice(-10).map((m) => ({
+          sender: m.interactionType === 'ai' ? 'assistant' : 'user',
+          content: m.content,
+        }));
+
+        const answer = await askGemini(query, history);
+
+        await sendMessage({
+          content: answer,
+          type: 'interaction',
+          interactionType: 'ai',
+          interactionData: {
+            prompt: query,
+          },
+        });
+      } catch (err) {
+        console.error('Failed to get response from miu. AI:', err);
+        await sendMessage({
+          content: 'Unable to reach miu. AI at the moment. Please try again.',
+          type: 'interaction',
+          interactionType: 'ai',
+        });
+      } finally {
+        setIsAiResponding(false);
+      }
+      return;
+    }
+
     // Normal message flow inside Magic Layer
     sendMessage({
       content: text,
@@ -728,6 +786,7 @@ export const ChatPage: React.FC = () => {
 
             {/* Typing indicator */}
             {isPartnerTyping && <TypingIndicator partnerName={partner.name} />}
+            {isAiResponding && <TypingIndicator partnerName="miu. AI" />}
 
             <div ref={messagesEndRef} className="h-1" />
           </div>
