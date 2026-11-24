@@ -11,7 +11,6 @@ import {
   Trash2,
   X,
   Clock,
-  Sparkles,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -35,11 +34,12 @@ interface AiChatbotProps {
 
 const AI_STORAGE_KEY = 'miu_ai_chat_history';
 const AI_SESSIONS_KEY = 'miu_recent_chat_sessions';
+const AI_CURRENT_SESSION_KEY = 'miu_current_session_id';
 
-// Default starter sessions if user hasn't chatted yet
+// Default starter sessions
 const DEFAULT_SESSIONS: ChatSession[] = [
   {
-    id: 'session-1',
+    id: 'session-sample-1',
     title: 'Quantum Computing & Qubits',
     timestamp: 'Today',
     messages: [
@@ -59,7 +59,7 @@ const DEFAULT_SESSIONS: ChatSession[] = [
     ],
   },
   {
-    id: 'session-2',
+    id: 'session-sample-2',
     title: 'Social AI Platform Architecture',
     timestamp: 'Yesterday',
     messages: [
@@ -79,7 +79,7 @@ const DEFAULT_SESSIONS: ChatSession[] = [
     ],
   },
   {
-    id: 'session-3',
+    id: 'session-sample-3',
     title: 'Weekend Creative Ideation',
     timestamp: '2 days ago',
     messages: [
@@ -100,7 +100,7 @@ const DEFAULT_SESSIONS: ChatSession[] = [
   },
 ];
 
-// Explore pills row 1 and row 2 (duplicated for seamless infinite marquee loop)
+// Explore pills row 1 and row 2 (duplicated for smooth infinite marquee loop)
 const EXPLORE_ROW_1 = [
   'You and ME',
   'Social AI platform',
@@ -139,7 +139,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Dynamic visualViewport tracker
+  // Dynamic visualViewport tracker for mobile virtual keyboard
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -164,7 +164,16 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     };
   }, []);
 
-  // Saved recent chat sessions
+  // Track the active session ID so all questions in the same chat stay within that session
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(AI_CURRENT_SESSION_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Saved recent chat sessions list
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
       const saved = localStorage.getItem(AI_SESSIONS_KEY);
@@ -199,6 +208,16 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       localStorage.setItem(AI_SESSIONS_KEY, JSON.stringify(sessions));
     } catch {}
   }, [sessions]);
+
+  useEffect(() => {
+    try {
+      if (currentSessionId) {
+        localStorage.setItem(AI_CURRENT_SESSION_KEY, currentSessionId);
+      } else {
+        localStorage.removeItem(AI_CURRENT_SESSION_KEY);
+      }
+    } catch {}
+  }, [currentSessionId]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -306,6 +325,12 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       return;
     }
 
+    // Determine or create the active session ID for this conversation
+    const sessionId = currentSessionId || `session-${Date.now()}`;
+    if (!currentSessionId) {
+      setCurrentSessionId(sessionId);
+    }
+
     const userMsg: AiChatMessage = {
       id: `ai-user-${Date.now()}`,
       sender: 'user',
@@ -330,18 +355,25 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       setMessages(finalMessages);
       setIsTyping(false);
 
-      // Auto-save or update in recent sessions
+      // FIX: Update the EXISTING session in history, do NOT create a new session for every question!
       setSessions((prev) => {
-        const title = trimmed.length > 30 ? trimmed.slice(0, 28) + '...' : trimmed;
-        const existingIdx = prev.findIndex((s) => s.id === 'current-session');
+        const existingIdx = prev.findIndex((s) => s.id === sessionId);
+        const title =
+          existingIdx >= 0
+            ? prev[existingIdx].title
+            : trimmed.length > 32
+            ? trimmed.slice(0, 30) + '...'
+            : trimmed;
+
         const sessionObj: ChatSession = {
-          id: existingIdx >= 0 ? prev[existingIdx].id : `session-${Date.now()}`,
-          title: existingIdx >= 0 ? prev[existingIdx].title : title,
+          id: sessionId,
+          title,
           timestamp: 'Just now',
           messages: finalMessages,
         };
-        const updated = prev.filter((s) => s.id !== sessionObj.id);
-        return [sessionObj, ...updated].slice(0, 10);
+
+        const remaining = prev.filter((s) => s.id !== sessionId);
+        return [sessionObj, ...remaining].slice(0, 15);
       });
     }, 400);
   };
@@ -355,13 +387,16 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
 
   const handleNewChat = () => {
     setMessages([]);
+    setCurrentSessionId(null);
     try {
       localStorage.removeItem(AI_STORAGE_KEY);
+      localStorage.removeItem(AI_CURRENT_SESSION_KEY);
     } catch {}
     setShowRecentChats(false);
   };
 
   const handleLoadSession = (session: ChatSession) => {
+    setCurrentSessionId(session.id);
     setMessages(session.messages);
     setShowRecentChats(false);
   };
@@ -369,14 +404,19 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    if (currentSessionId === sessionId) {
+      handleNewChat();
+    }
   };
 
   const handleClearAllSessions = () => {
     setSessions([]);
     setMessages([]);
+    setCurrentSessionId(null);
     try {
       localStorage.removeItem(AI_SESSIONS_KEY);
       localStorage.removeItem(AI_STORAGE_KEY);
+      localStorage.removeItem(AI_CURRENT_SESSION_KEY);
     } catch {}
     setShowRecentChats(false);
   };
@@ -390,10 +430,10 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       <div className="w-full max-w-[760px] flex-1 min-h-0 flex flex-col bg-[#FAF9F7] dark:bg-[#111214] relative overflow-hidden">
         
         {/* ========================================================= */}
-        {/* TOP BAR: Left hamburger, CENTER miu. logo, Right bubble   */}
+        {/* FLOATING TOP BUTTONS (NO HEADER BAR!)                     */}
         {/* ========================================================= */}
-        <header className="shrink-0 flex-shrink-0 w-full px-5 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex items-center justify-between select-none z-30">
-          {/* Left: Hamburger menu in circle (Opens Recent Chats) */}
+        <div className="shrink-0 flex-shrink-0 w-full px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-1 flex items-center justify-between select-none z-30">
+          {/* Left: Floating circular hamburger button to see Recent Chats */}
           <button
             type="button"
             onClick={() => setShowRecentChats(true)}
@@ -404,62 +444,36 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
             <Menu className="w-5 h-5 stroke-[2]" />
           </button>
 
-          {/* TOP CENTRE: miu. Logo */}
-          <div className="flex-1 flex justify-center items-center">
-            <h1 className="text-2xl sm:text-[28px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5] select-none leading-none">
-              miu<span className="text-[#A99BCB] dark:text-[#B6A4DC]">.</span>
-            </h1>
-          </div>
-
-          {/* Right: Speech bubble in circle (New Chat) */}
+          {/* Right: Floating circular speech bubble button to start a new chat */}
           <button
             type="button"
             onClick={handleNewChat}
-            title="New Chat"
-            aria-label="New Chat"
+            title="New Conversation"
+            aria-label="New Conversation"
             className="w-10 h-10 rounded-full border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] flex items-center justify-center text-[#171717] dark:text-[#F5F5F5] hover:opacity-80 active:scale-95 transition-all shadow-xs cursor-pointer shrink-0"
           >
             <MessageCircle className="w-5 h-5 stroke-[1.8]" />
           </button>
-        </header>
+        </div>
 
         {/* ========================================================= */}
         {/* MAIN CONVERSATION / EXPLORE BODY (flex: 1, min-h: 0, scroll) */}
         {/* ========================================================= */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-2 space-y-4 no-scrollbar overscroll-contain flex flex-col justify-between">
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-1 space-y-4 no-scrollbar overscroll-contain flex flex-col justify-between">
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col justify-between py-2 select-none animate-fade-in">
               
-              {/* Exact Hand-Drawn Continuous Line Art matching the sketch image */}
-              <div className="my-auto py-2 flex items-center justify-center pointer-events-none">
-                <svg
-                  className="w-full max-w-[340px] h-[210px] text-[#171717] dark:text-[#F5F5F5]"
-                  viewBox="0 0 340 210"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  {/* Upper loop: Sweeps out to right, loops 180 deg around, heads left */}
-                  <path
-                    d="M 155 35 C 235 30, 335 35, 335 68 C 335 105, 235 108, 160 108"
-                    stroke="currentColor"
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="opacity-80 transition-colors"
-                  />
-                  {/* Lower sweep: Enters from left edge, dips down across bottom, curves up right side */}
-                  <path
-                    d="M 5 116 C 65 116, 95 156, 175 156 C 265 156, 335 142, 335 95 C 335 70, 255 72, 215 75"
-                    stroke="currentColor"
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="opacity-80 transition-colors"
-                  />
-                </svg>
+              {/* BIG miu. LOGO: PLACED A LITTLE BIT DOWN & CENTERED */}
+              <div className="w-full flex justify-center items-center pt-2 sm:pt-4 pb-2">
+                <h1 className="text-[52px] sm:text-[68px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5] select-none leading-none">
+                  miu<span className="text-[#A99BCB] dark:text-[#B6A4DC]">.</span>
+                </h1>
               </div>
 
-              {/* Lower Section: Centered "Explore" & Horizontal Opposite Direction Marquees */}
+              {/* CLEAN CENTER SPACE (NO LINES!) */}
+              <div className="my-auto py-6" />
+
+              {/* LOWER SECTION: CENTERED "Explore" & OPPOSITE DIRECTION MARQUEES */}
               <div className="pb-4 w-full overflow-hidden">
                 {/* Word Explore in the Centre */}
                 <h3 className="text-center text-[18px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5] mb-3">
@@ -549,7 +563,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
         </div>
 
         {/* ========================================================= */}
-        {/* BOTTOM COMPOSER: Rounded Box exactly matching the sketch  */}
+        {/* BOTTOM COMPOSER: Rounded Box                              */}
         {/* "Ask miu. ....." with + on left, v and (|||) on right       */}
         {/* ========================================================= */}
         <div className="shrink-0 flex-shrink-0 w-full p-4 pt-1 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] z-30">
@@ -697,7 +711,11 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
                     <div
                       key={session.id}
                       onClick={() => handleLoadSession(session)}
-                      className="group flex items-center justify-between p-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer text-left"
+                      className={`group flex items-center justify-between p-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer text-left ${
+                        currentSessionId === session.id
+                          ? 'bg-neutral-100 dark:bg-neutral-800 border-l-2 border-[#A99BCB] dark:border-[#B6A4DC]'
+                          : ''
+                      }`}
                     >
                       <div className="min-w-0 flex-1 pr-2">
                         <p className="text-xs font-medium text-[#171717] dark:text-[#F5F5F5] truncate">
