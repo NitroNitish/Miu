@@ -13,6 +13,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import { askGemini } from '../../lib/gemini';
 
 export interface AiChatMessage {
   id: string;
@@ -312,7 +313,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     );
   };
 
-  const handleSendText = (textToSend?: string) => {
+  const handleSendText = async (textToSend?: string) => {
     const rawText = textToSend !== undefined ? textToSend : input;
     const trimmed = rawText.trim();
     if (!trimmed) return;
@@ -343,39 +344,51 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     setInput('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const responseText = generateAiResponse(trimmed);
-      const assistantMsg: AiChatMessage = {
-        id: `ai-bot-${Date.now()}`,
-        sender: 'assistant',
-        content: responseText,
-        timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-      };
-      const finalMessages = [...nextMessages, assistantMsg];
-      setMessages(finalMessages);
+    let responseText = '';
+    try {
+      // Local utility commands handled instantly
+      if (trimmed.startsWith('/')) {
+        responseText = generateAiResponse(trimmed);
+      } else {
+        // Live Gemini API completion with multi-turn conversation context
+        responseText = await askGemini(trimmed, nextMessages);
+      }
+    } catch (err) {
+      console.warn('Gemini request fallback to internal engine:', err);
+      responseText = generateAiResponse(trimmed);
+    } finally {
       setIsTyping(false);
+    }
 
-      // FIX: Update the EXISTING session in history, do NOT create a new session for every question!
-      setSessions((prev) => {
-        const existingIdx = prev.findIndex((s) => s.id === sessionId);
-        const title =
-          existingIdx >= 0
-            ? prev[existingIdx].title
-            : trimmed.length > 32
-            ? trimmed.slice(0, 30) + '...'
-            : trimmed;
+    const assistantMsg: AiChatMessage = {
+      id: `ai-bot-${Date.now()}`,
+      sender: 'assistant',
+      content: responseText,
+      timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    };
+    const finalMessages = [...nextMessages, assistantMsg];
+    setMessages(finalMessages);
 
-        const sessionObj: ChatSession = {
-          id: sessionId,
-          title,
-          timestamp: 'Just now',
-          messages: finalMessages,
-        };
+    // FIX: Update the EXISTING session in history, do NOT create a new session for every question!
+    setSessions((prev) => {
+      const existingIdx = prev.findIndex((s) => s.id === sessionId);
+      const title =
+        existingIdx >= 0
+          ? prev[existingIdx].title
+          : trimmed.length > 32
+          ? trimmed.slice(0, 30) + '...'
+          : trimmed;
 
-        const remaining = prev.filter((s) => s.id !== sessionId);
-        return [sessionObj, ...remaining].slice(0, 15);
-      });
-    }, 400);
+      const sessionObj: ChatSession = {
+        id: sessionId,
+        title,
+        timestamp: 'Just now',
+        messages: finalMessages,
+      };
+
+      const remaining = prev.filter((s) => s.id !== sessionId);
+      return [sessionObj, ...remaining].slice(0, 15);
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
