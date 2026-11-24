@@ -1,32 +1,72 @@
-# React + TypeScript + Vite
+# Miu.
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+An ultra-private, aesthetic 2-person messenger hidden behind an intelligent AI chatbot decoy.
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Miu is designed for two people who want absolute privacy.
+To the outside world and casual glance, the app opens as **Miu AI**, a sleek AI assistant with explore topics and conversation sessions.
+Entering the secret local command `/qupa` instantly opens **Magic Layer**, establishing a private, real-time encrypted communication channel with your single authorized partner.
 
-## React Compiler
+## Key Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **AI Chatbot Decoy**: Authentic AI conversational experience with horizontal explore marquees and persistent session history.
+- **Magic Layer Secret Interception**: The secret command `/qupa` is handled locally, never sent to any server or logged in chat history.
+- **Single-Pair Architecture**: Enforces exactly two authorized users per connection with atomic pairing via single-use invite tokens or 6-character codes.
+- **Discreet Privacy Exits**: Instant return to chatbot on <kbd>Esc</kbd> or header double-tap; app-switcher privacy blur shield.
+- **Rich Media & Controls**: View-once self-destructing media, voice messages, real-time typing indicators, read receipts, and reactions.
+- **Passcode & Biometrics**: Optional PIN or biometric lock before accessing the private space.
 
-## Expanding the Oxlint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS v4, Lucide React
+- **Backend & Database**: Supabase (PostgreSQL, Row-Level Security, Realtime, Storage)
+- **Deployment**: Vercel / Firebase Hosting
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## Project Structure
+
+```text
+miu/
+├── public/                 # Static assets and SPA redirects
+├── src/
+│   ├── components/
+│   │   ├── chat/           # Chatbot decoy & private messaging components
+│   │   └── common/         # Core reusable UI modals and inputs
+│   ├── context/            # Auth, Chat, and Theme React contexts
+│   ├── data/               # Default state initializers
+│   ├── lib/                # Supabase client configuration
+│   ├── pages/              # Primary route pages (Chat, Auth, Join, Profile, Splash)
+│   ├── types/              # Clean TypeScript interfaces
+│   ├── utils/              # Image processing and privacy utilities
+│   ├── App.tsx             # Root layout and route configuration
+│   ├── index.css           # Global Tailwind and viewport styles
+│   └── main.tsx            # Application entry point
+└── supabase/
+    ├── schema.sql          # Complete production database schema & RLS policies
+    └── migrate_cleanup.sql # One-click database optimization & cleanup migration
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Database Setup
+
+1. Create a project in [Supabase](https://supabase.com).
+2. Open **SQL Editor** in the Supabase Dashboard.
+3. Paste and run the contents of `supabase/schema.sql`.
+4. Ensure the storage buckets `chat-media`, `voice-messages`, and `avatars` exist in Supabase Storage.
+5. Create a `.env` file with your credentials:
+   ```env
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start local dev server
+npm run dev
+
+# Build for production
+npm run build
+```

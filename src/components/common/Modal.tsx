@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { IconButton } from './IconButton';
 
 interface ModalProps {
   isOpen: boolean;
@@ -72,9 +71,14 @@ export const Modal: React.FC<ModalProps> = ({
               </h3>
             ) : <div />}
             {showCloseButton && (
-              <IconButton size="sm" onClick={onClose} aria-label="Close dialog">
-                <X className="w-4 h-4 text-neutral-500" />
-              </IconButton>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close dialog"
+                className="p-1 rounded-full text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
           </div>
         )}
