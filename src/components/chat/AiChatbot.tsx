@@ -9,8 +9,9 @@ import {
   Sun,
   Moon,
   Trash2,
+  X,
+  Clock,
   Sparkles,
-  Bot,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -21,27 +22,116 @@ export interface AiChatMessage {
   timestamp: string;
 }
 
+interface ChatSession {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: AiChatMessage[];
+}
+
 interface AiChatbotProps {
   onTriggerSecretCommand: () => void;
 }
 
 const AI_STORAGE_KEY = 'miu_ai_chat_history';
+const AI_SESSIONS_KEY = 'miu_recent_chat_sessions';
 
-// Explore pills matching the user's sketch
-const EXPLORE_PILLS = [
+// Default starter sessions if user hasn't chatted yet
+const DEFAULT_SESSIONS: ChatSession[] = [
+  {
+    id: 'session-1',
+    title: 'Quantum Computing & Qubits',
+    timestamp: 'Today',
+    messages: [
+      {
+        id: 'msg-s1-1',
+        sender: 'user',
+        content: 'Explain quantum computing simply',
+        timestamp: '10:14 AM',
+      },
+      {
+        id: 'msg-s1-2',
+        sender: 'assistant',
+        content:
+          'Quantum computing uses qubits that exist in superpositions of 0 and 1 simultaneously, enabling complex calculations exponentially faster than classical computers.',
+        timestamp: '10:14 AM',
+      },
+    ],
+  },
+  {
+    id: 'session-2',
+    title: 'Social AI Platform Architecture',
+    timestamp: 'Yesterday',
+    messages: [
+      {
+        id: 'msg-s2-1',
+        sender: 'user',
+        content: 'What makes a social AI platform special?',
+        timestamp: '3:30 PM',
+      },
+      {
+        id: 'msg-s2-2',
+        sender: 'assistant',
+        content:
+          'A thoughtful social AI platform emphasizes calm, private, and human-centric interaction over algorithmically noisy feeds.',
+        timestamp: '3:30 PM',
+      },
+    ],
+  },
+  {
+    id: 'session-3',
+    title: 'Weekend Creative Ideation',
+    timestamp: '2 days ago',
+    messages: [
+      {
+        id: 'msg-s3-1',
+        sender: 'user',
+        content: 'Give me 3 weekend project ideas',
+        timestamp: '11:05 AM',
+      },
+      {
+        id: 'msg-s3-2',
+        sender: 'assistant',
+        content:
+          '1. Ambient sound generator\n2. Minimalist markdown garden\n3. Single-purpose productivity tool',
+        timestamp: '11:05 AM',
+      },
+    ],
+  },
+];
+
+// Explore pills row 1 and row 2 (duplicated for seamless infinite marquee loop)
+const EXPLORE_ROW_1 = [
   'You and ME',
   'Social AI platform',
   'Quantum',
+  'Robotics Challenge',
+  'Neural Design',
+  'You and ME',
+  'Social AI platform',
+  'Quantum',
+  'Robotics Challenge',
+  'Neural Design',
+];
+
+const EXPLORE_ROW_2 = [
   'Fire.',
   'Water is a',
   'Robotics Challenge',
+  'Creative Writing',
+  'Deep Space',
+  'Fire.',
+  'Water is a',
+  'Robotics Challenge',
+  'Creative Writing',
+  'Deep Space',
 ];
 
 export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) => {
   const { isDark, setThemeMode } = useTheme();
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showRecentChats, setShowRecentChats] = useState(false);
   const [selectedModel, setSelectedModel] = useState('Miu 2.5');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -49,7 +139,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Dynamically track visualViewport for mobile virtual keyboards
+  // Dynamic visualViewport tracker
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -74,6 +164,19 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     };
   }, []);
 
+  // Saved recent chat sessions
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+    try {
+      const saved = localStorage.getItem(AI_SESSIONS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_SESSIONS;
+  });
+
+  // Current active conversation messages
   const [messages, setMessages] = useState<AiChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem(AI_STORAGE_KEY);
@@ -90,6 +193,12 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(messages));
     } catch {}
   }, [messages]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AI_SESSIONS_KEY, JSON.stringify(sessions));
+    } catch {}
+  }, [sessions]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -120,7 +229,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
         );
       }
       if (trimmed === '/clear') {
-        setTimeout(() => handleClearHistory(), 100);
+        setTimeout(() => handleNewChat(), 100);
         return 'Clearing conversation history...';
       }
       if (trimmed === '/status') {
@@ -145,7 +254,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     if (trimmed.includes('quantum')) {
       return (
         "**Quantum Mechanics** explores nature at the fundamental atomic level:\n\n" +
-        "• **Superposition**: Particles can exist across multiple states until measured.\n" +
+        "• **Superposition**: Particles can exist across multiple states simultaneously until measured.\n" +
         "• **Entanglement**: Two quantum particles can remain instantaneously connected regardless of distance.\n" +
         "• **Quantum Computing**: Uses quantum bits (qubits) to perform complex calculations exponentially faster."
       );
@@ -171,7 +280,6 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       );
     }
 
-    // General conversation
     if (trimmed.includes('hello') || trimmed.includes('hi') || trimmed.includes('hey')) {
       return "Hello! I'm miu. How can I assist you with your thoughts or tasks today?";
     }
@@ -205,7 +313,8 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
       timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setInput('');
     setIsTyping(true);
 
@@ -217,8 +326,23 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
         content: responseText,
         timestamp: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, assistantMsg]);
+      const finalMessages = [...nextMessages, assistantMsg];
+      setMessages(finalMessages);
       setIsTyping(false);
+
+      // Auto-save or update in recent sessions
+      setSessions((prev) => {
+        const title = trimmed.length > 30 ? trimmed.slice(0, 28) + '...' : trimmed;
+        const existingIdx = prev.findIndex((s) => s.id === 'current-session');
+        const sessionObj: ChatSession = {
+          id: existingIdx >= 0 ? prev[existingIdx].id : `session-${Date.now()}`,
+          title: existingIdx >= 0 ? prev[existingIdx].title : title,
+          timestamp: 'Just now',
+          messages: finalMessages,
+        };
+        const updated = prev.filter((s) => s.id !== sessionObj.id);
+        return [sessionObj, ...updated].slice(0, 10);
+      });
     }, 400);
   };
 
@@ -229,83 +353,71 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     }
   };
 
-  const handleClearHistory = () => {
+  const handleNewChat = () => {
     setMessages([]);
     try {
       localStorage.removeItem(AI_STORAGE_KEY);
     } catch {}
-    setShowMenu(false);
+    setShowRecentChats(false);
   };
 
-  const handlePillClick = (pill: string) => {
-    handleSendText(pill);
+  const handleLoadSession = (session: ChatSession) => {
+    setMessages(session.messages);
+    setShowRecentChats(false);
+  };
+
+  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+  };
+
+  const handleClearAllSessions = () => {
+    setSessions([]);
+    setMessages([]);
+    try {
+      localStorage.removeItem(AI_SESSIONS_KEY);
+      localStorage.removeItem(AI_STORAGE_KEY);
+    } catch {}
+    setShowRecentChats(false);
   };
 
   return (
     <div
       style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
-      className="w-full max-h-[100dvh] bg-[#FAF9F7] dark:bg-[#111214] text-[#171717] dark:text-[#F5F5F5] flex flex-col items-center overflow-hidden"
+      className="w-full max-h-[100dvh] bg-[#FAF9F7] dark:bg-[#111214] text-[#171717] dark:text-[#F5F5F5] flex flex-col items-center overflow-hidden relative"
     >
       {/* 760px reference container */}
       <div className="w-full max-w-[760px] flex-1 min-h-0 flex flex-col bg-[#FAF9F7] dark:bg-[#111214] relative overflow-hidden">
         
         {/* ========================================================= */}
-        {/* TOP BAR: Left hamburger in circle, Right bubble in circle */}
+        {/* TOP BAR: Left hamburger, CENTER miu. logo, Right bubble   */}
         {/* ========================================================= */}
         <header className="shrink-0 flex-shrink-0 w-full px-5 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] flex items-center justify-between select-none z-30">
-          {/* Left: Hamburger menu in circle */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowMenu(!showMenu)}
-              aria-label="Menu"
-              className="w-10 h-10 rounded-full border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] flex items-center justify-center text-[#171717] dark:text-[#F5F5F5] hover:opacity-80 active:scale-95 transition-all shadow-xs cursor-pointer"
-            >
-              <Menu className="w-5 h-5 stroke-[2]" />
-            </button>
-
-            {/* Dropdown Menu */}
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowMenu(false)}
-                />
-                <div className="absolute left-0 top-12 w-48 bg-[#FFFFFF] dark:bg-[#191A1D] border border-[#EEEEEC] dark:border-[#303136] rounded-2xl shadow-xl py-2 z-50 animate-slide-up text-xs font-medium">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setThemeMode(isDark ? 'light' : 'dark');
-                      setShowMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[#171717] dark:text-[#F5F5F5] hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-left cursor-pointer"
-                  >
-                    {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-purple-400" />}
-                    <span>{isDark ? 'Switch to Light' : 'Switch to Dark'}</span>
-                  </button>
-
-                  <div className="my-1 border-t border-[#EEEEEC] dark:border-[#303136]" />
-
-                  <button
-                    type="button"
-                    onClick={handleClearHistory}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-neutral-600 dark:text-neutral-400 hover:text-red-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-left cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Clear conversation</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Right: Speech bubble in circle */}
+          {/* Left: Hamburger menu in circle (Opens Recent Chats) */}
           <button
             type="button"
-            onClick={handleClearHistory}
+            onClick={() => setShowRecentChats(true)}
+            aria-label="Recent chats"
+            title="Recent chats"
+            className="w-10 h-10 rounded-full border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] flex items-center justify-center text-[#171717] dark:text-[#F5F5F5] hover:opacity-80 active:scale-95 transition-all shadow-xs cursor-pointer shrink-0"
+          >
+            <Menu className="w-5 h-5 stroke-[2]" />
+          </button>
+
+          {/* TOP CENTRE: miu. Logo */}
+          <div className="flex-1 flex justify-center items-center">
+            <h1 className="text-2xl sm:text-[28px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5] select-none leading-none">
+              miu<span className="text-[#A99BCB] dark:text-[#B6A4DC]">.</span>
+            </h1>
+          </div>
+
+          {/* Right: Speech bubble in circle (New Chat) */}
+          <button
+            type="button"
+            onClick={handleNewChat}
             title="New Chat"
             aria-label="New Chat"
-            className="w-10 h-10 rounded-full border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] flex items-center justify-center text-[#171717] dark:text-[#F5F5F5] hover:opacity-80 active:scale-95 transition-all shadow-xs cursor-pointer"
+            className="w-10 h-10 rounded-full border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] flex items-center justify-center text-[#171717] dark:text-[#F5F5F5] hover:opacity-80 active:scale-95 transition-all shadow-xs cursor-pointer shrink-0"
           >
             <MessageCircle className="w-5 h-5 stroke-[1.8]" />
           </button>
@@ -314,104 +426,82 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
         {/* ========================================================= */}
         {/* MAIN CONVERSATION / EXPLORE BODY (flex: 1, min-h: 0, scroll) */}
         {/* ========================================================= */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-2 space-y-4 no-scrollbar overscroll-contain flex flex-col">
-          {/* If there are no messages, show the exact sketch view */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-2 space-y-4 no-scrollbar overscroll-contain flex flex-col justify-between">
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col justify-between py-2 select-none animate-fade-in">
-              {/* Upper Section: Big "miu." Title */}
-              <div className="pt-2 px-1">
-                <h1 className="text-[52px] sm:text-[64px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5] leading-none">
-                  miu<span className="text-[#A99BCB] dark:text-[#B6A4DC]">.</span>
-                </h1>
-              </div>
-
-              {/* Center Artistic Fluid Line (Matching the "S" curve wave in the sketch) */}
-              <div className="my-auto py-4 flex items-center justify-center pointer-events-none">
+              
+              {/* Exact Hand-Drawn Continuous Line Art matching the sketch image */}
+              <div className="my-auto py-2 flex items-center justify-center pointer-events-none">
                 <svg
-                  className="w-full max-w-[340px] h-[170px] opacity-85 text-[#171717] dark:text-[#F5F5F5]"
-                  viewBox="0 0 340 170"
+                  className="w-full max-w-[340px] h-[210px] text-[#171717] dark:text-[#F5F5F5]"
+                  viewBox="0 0 340 210"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  <defs>
-                    <linearGradient id="miuWaveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#171717" className="dark:stop-color-[#F5F5F5]" />
-                      <stop offset="50%" stopColor="#A99BCB" className="dark:stop-color-[#B6A4DC]" />
-                      <stop offset="100%" stopColor="#171717" className="dark:stop-color-[#F5F5F5]" />
-                    </linearGradient>
-                  </defs>
-                  {/* Organic S-curve path matching sketch precisely */}
+                  {/* Upper loop: Sweeps out to right, loops 180 deg around, heads left */}
                   <path
-                    d="M 12 110 C 80 110, 115 145, 175 145 C 270 145, 335 125, 335 72 C 335 25, 230 20, 165 42 C 160 44, 158 55, 172 65 C 220 85, 310 82, 335 84"
+                    d="M 155 35 C 235 30, 335 35, 335 68 C 335 105, 235 108, 160 108"
                     stroke="currentColor"
                     strokeWidth="3.2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="opacity-75 transition-colors"
+                    className="opacity-80 transition-colors"
+                  />
+                  {/* Lower sweep: Enters from left edge, dips down across bottom, curves up right side */}
+                  <path
+                    d="M 5 116 C 65 116, 95 156, 175 156 C 265 156, 335 142, 335 95 C 335 70, 255 72, 215 75"
+                    stroke="currentColor"
+                    strokeWidth="3.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="opacity-80 transition-colors"
                   />
                 </svg>
               </div>
 
-              {/* Lower Section: "Explore" Header & Organic Prompt Pills */}
-              <div className="pb-3">
-                <h3 className="text-[17px] font-semibold text-[#171717] dark:text-[#F5F5F5] mb-3 px-1">
+              {/* Lower Section: Centered "Explore" & Horizontal Opposite Direction Marquees */}
+              <div className="pb-4 w-full overflow-hidden">
+                {/* Word Explore in the Centre */}
+                <h3 className="text-center text-[18px] font-bold tracking-tight text-[#171717] dark:text-[#F5F5F5] mb-3">
                   Explore
                 </h3>
 
-                {/* Row 1 */}
-                <div className="flex flex-wrap items-center gap-2 mb-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handlePillClick('You and ME')}
-                    className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs cursor-pointer"
-                  >
-                    You and ME
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePillClick('Social AI platform')}
-                    className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs cursor-pointer"
-                  >
-                    Social AI platform
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePillClick('Quantum')}
-                    className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs cursor-pointer"
-                  >
-                    Quantum
-                  </button>
+                {/* Row 1: Marquee moving in one direction (Left) */}
+                <div className="w-full overflow-hidden mb-2.5 [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
+                  <div className="flex gap-2.5 w-max animate-marquee-left hover:[animation-play-state:paused]">
+                    {EXPLORE_ROW_1.map((pill, idx) => (
+                      <button
+                        key={`${pill}-${idx}`}
+                        type="button"
+                        onClick={() => handleSendText(pill)}
+                        className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs whitespace-nowrap cursor-pointer shrink-0"
+                      >
+                        {pill}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Row 2 */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePillClick('Fire.')}
-                    className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs cursor-pointer"
-                  >
-                    Fire.
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePillClick('Water is a')}
-                    className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs cursor-pointer"
-                  >
-                    Water is a
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePillClick('Robotics Challenge')}
-                    className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs cursor-pointer"
-                  >
-                    Robotics Challen
-                  </button>
+                {/* Row 2: Marquee moving in the OPPOSITE direction (Right) */}
+                <div className="w-full overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]">
+                  <div className="flex gap-2.5 w-max animate-marquee-right hover:[animation-play-state:paused]">
+                    {EXPLORE_ROW_2.map((pill, idx) => (
+                      <button
+                        key={`${pill}-${idx}`}
+                        type="button"
+                        onClick={() => handleSendText(pill)}
+                        className="px-4 py-2 rounded-2xl border border-[#DCDAD5] dark:border-[#2C2E35] bg-[#FFFFFF] dark:bg-[#191A1D] text-xs sm:text-sm font-medium text-[#171717] dark:text-[#F5F5F5] hover:border-[#A99BCB] dark:hover:border-[#B6A4DC] active:scale-95 transition-all shadow-2xs whitespace-nowrap cursor-pointer shrink-0"
+                      >
+                        {pill}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
             /* Active message stream */
-            <div className="space-y-4 py-2">
+            <div className="space-y-4 py-2 flex-1">
               {messages.map((msg) => {
                 const isUser = msg.sender === 'user';
                 return (
@@ -553,6 +643,107 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
           </div>
         </div>
       </div>
+
+      {/* ========================================================= */}
+      {/* RECENT CHATS SLIDE-OVER DRAWER (From Hamburger button)    */}
+      {/* ========================================================= */}
+      {showRecentChats && (
+        <div className="fixed inset-0 z-[9999] flex select-none animate-fade-in">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setShowRecentChats(false)}
+          />
+
+          {/* Drawer Panel */}
+          <div className="relative w-full max-w-[320px] bg-[#FFFFFF] dark:bg-[#16171A] border-r border-[#EEEEEC] dark:border-[#2C2E35] h-full flex flex-col justify-between z-10 shadow-2xl p-4 animate-slide-right">
+            {/* Drawer Header */}
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-[#EEEEEC] dark:border-[#2C2E35] mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4.5 h-4.5 text-[#A99BCB] dark:text-[#B6A4DC]" />
+                  <h2 className="text-sm font-bold text-[#171717] dark:text-[#F5F5F5]">
+                    Recent Chats
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRecentChats(false)}
+                  className="p-1 rounded-full text-neutral-400 hover:text-[#171717] dark:hover:text-white transition-colors cursor-pointer"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Start New Chat Button */}
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 mb-3 rounded-xl bg-[#171717] dark:bg-[#F5F5F5] text-white dark:text-[#171717] text-xs font-semibold hover:opacity-90 active:scale-95 transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <span>New Conversation</span>
+              </button>
+
+              {/* List of Recent Sessions */}
+              <div className="space-y-1.5 overflow-y-auto max-h-[calc(100vh-250px)] no-scrollbar">
+                {sessions.length === 0 ? (
+                  <p className="text-xs text-neutral-400 text-center py-6">
+                    No recent conversations
+                  </p>
+                ) : (
+                  sessions.map((session) => (
+                    <div
+                      key={session.id}
+                      onClick={() => handleLoadSession(session)}
+                      className="group flex items-center justify-between p-2.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer text-left"
+                    >
+                      <div className="min-w-0 flex-1 pr-2">
+                        <p className="text-xs font-medium text-[#171717] dark:text-[#F5F5F5] truncate">
+                          {session.title}
+                        </p>
+                        <p className="text-[10px] text-neutral-400 mt-0.5">
+                          {session.timestamp} • {session.messages.length} messages
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteSession(session.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-neutral-400 hover:text-red-400 transition-opacity"
+                        title="Delete chat"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="pt-3 border-t border-[#EEEEEC] dark:border-[#2C2E35] space-y-2">
+              <button
+                type="button"
+                onClick={() => setThemeMode(isDark ? 'light' : 'dark')}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <span>Theme: {isDark ? 'Dark Mode' : 'Light Mode'}</span>
+                {isDark ? <Moon className="w-4 h-4 text-purple-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleClearAllSessions}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear All Chats</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

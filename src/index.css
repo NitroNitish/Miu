@@ -98,7 +98,26 @@
   padding-bottom: env(safe-area-inset-bottom, 16px);
 }
 .safe-pt {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* Horizontal opposite-direction marquee animations for explore topics */
+@keyframes marquee-left {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marquee-right {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0%); }
+}
+
+.animate-marquee-left {
+  animation: marquee-left 28s linear infinite;
+}
+
+.animate-marquee-right {
+  animation: marquee-right 28s linear infinite;
 }
 
 /* Subtle animations */

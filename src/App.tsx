@@ -68,8 +68,8 @@ export function App() {
           <BrowserRouter>
             <AppLayout>
               <Routes>
-                {/* Opening Splash Screen on root */}
-                <Route path="/" element={<SplashScreen />} />
+                {/* Default root opens directly to Miu AI chatbot home page */}
+                <Route path="/" element={<Navigate to="/chat" replace />} />
                 <Route path="/splash" element={<SplashScreen />} />
                 <Route path="/login" element={<AuthPage />} />
                 <Route path="/auth" element={<Navigate to="/login" replace />} />
