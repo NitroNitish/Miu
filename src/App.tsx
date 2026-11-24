@@ -10,7 +10,6 @@ import { SwipeNavigation } from './components/navigation/SwipeNavigation';
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
 import { JoinPage } from './pages/JoinPage';
-import { ChatsPage } from './pages/ChatsPage';
 import { ChatPage } from './pages/ChatPage';
 import { TogetherPage } from './pages/TogetherPage';
 import { DoodlePage } from './pages/DoodlePage';
@@ -22,15 +21,16 @@ import { TicTacToePage } from './pages/TicTacToePage';
 const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
 
+  // Primary AI Chatbot and standalone auth/splash pages have no messaging sidebar or bottom tabs
   const isStandalonePage =
     location.pathname === '/' ||
     location.pathname === '/splash' ||
     location.pathname === '/login' ||
     location.pathname === '/auth' ||
+    location.pathname === '/chat' ||
     location.pathname.startsWith('/join') ||
     location.pathname.startsWith('/invite');
 
-  // Certain screens like active Chat and Doodle have their own immersive bottom composer/toolbar on mobile
   const hideBottomNavOnMobile =
     isStandalonePage ||
     location.pathname === '/chat' ||
@@ -78,9 +78,13 @@ export function App() {
                 <Route path="/invite" element={<JoinPage />} />
                 <Route path="/invite/:token" element={<JoinPage />} />
 
-                {/* Main Application Screens */}
+                {/* Primary AI Chatbot & Magic Layer Screen */}
                 <Route path="/chat" element={<ChatPage />} />
-                <Route path="/chats" element={<ChatsPage />} />
+                
+                {/* Prevent exposing inbox/contacts in normal interface */}
+                <Route path="/chats" element={<Navigate to="/chat" replace />} />
+                
+                {/* Secondary tools (accessible only via direct link or in-session) */}
                 <Route path="/together" element={<TogetherPage />} />
                 <Route path="/together/tic-tac-toe" element={<TicTacToePage />} />
                 <Route path="/games/tic-tac-toe" element={<TicTacToePage />} />
@@ -89,7 +93,7 @@ export function App() {
                 <Route path="/memories" element={<MemoriesPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
 
-                {/* Fallback */}
+                {/* Fallback to primary AI assistant */}
                 <Route path="*" element={<Navigate to="/chat" replace />} />
               </Routes>
             </AppLayout>

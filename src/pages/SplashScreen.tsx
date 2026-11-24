@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { Sun, Moon } from 'lucide-react';
 
 interface SplashScreenProps {
@@ -14,6 +15,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 }) => {
   const navigate = useNavigate();
   const { isDark, setThemeMode } = useTheme();
+  const { user } = useAuth();
 
   useEffect(() => {
     // Check if URL has invite parameters (e.g. from redirect or query string)
@@ -29,18 +31,27 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       if (onFinish) {
         onFinish();
       } else {
-        navigate('/login');
+        // If user is authenticated, open the normal AI chatbot interface directly
+        if (user) {
+          navigate('/chat');
+        } else {
+          navigate('/login');
+        }
       }
-    }, 1800);
+    }, 1500);
 
     return () => clearTimeout(timer);
-  }, [autoRedirect, navigate, onFinish]);
+  }, [autoRedirect, navigate, onFinish, user]);
 
   const handleSkip = () => {
     if (onFinish) {
       onFinish();
     } else {
-      navigate('/login');
+      if (user) {
+        navigate('/chat');
+      } else {
+        navigate('/login');
+      }
     }
   };
 
@@ -50,7 +61,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       className="miu fixed inset-0 z-50 flex items-center justify-center bg-[#F7F4EF] dark:bg-[#111214] text-[#1C1B1F] dark:text-[#F5F5F5] select-none cursor-pointer transition-colors duration-200"
     >
       <div className="relative w-full max-w-[375px] h-full max-h-[812px] bg-[#F7F4EF] dark:bg-[#111214] overflow-hidden flex flex-col justify-between p-6">
-        {/* Top subtle theme toggle button (replaces fake phone status bar) */}
+        {/* Top subtle theme toggle button */}
         <div className="w-full flex justify-end pt-2 z-20">
           <button
             onClick={(e) => {
@@ -73,7 +84,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
 
         {/* Tagline Text */}
         <p className="absolute left-0 right-0 bottom-[112px] text-center text-[13px] text-[#8C867E] dark:text-[#999999]">
-          Private by design.
+          AI Assistant & Workspace
         </p>
 
         {/* Home Indicator Bar */}

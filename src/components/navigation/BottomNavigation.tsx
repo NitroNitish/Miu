@@ -1,31 +1,27 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { MessageSquare, Sparkles, Image, User } from 'lucide-react';
-import { useChat } from '../../context/ChatContext';
+import { Bot, Sparkles, Image, User } from 'lucide-react';
 
 export const BottomNavigation: React.FC = () => {
-  const { unreadCount } = useChat();
-
   const navItems = [
     {
-      to: '/chats',
-      label: 'Chats',
-      icon: MessageSquare,
-      badge: unreadCount > 0 ? unreadCount : undefined,
+      to: '/chat',
+      label: 'Assistant',
+      icon: Bot,
     },
     {
       to: '/together',
-      label: 'Together',
+      label: 'Workspace',
       icon: Sparkles,
     },
     {
       to: '/memories',
-      label: 'Memories',
+      label: 'Gallery',
       icon: Image,
     },
     {
       to: '/profile',
-      label: 'Profile',
+      label: 'Settings',
       icon: User,
     },
   ];
@@ -55,11 +51,6 @@ export const BottomNavigation: React.FC = () => {
                         isActive ? 'scale-105 stroke-[2.2]' : 'stroke-[1.8]'
                       }`}
                     />
-                    {typeof item.badge === 'number' && (
-                      <span className="absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#A99BCB] dark:bg-[#B6A4DC] text-white dark:text-[#111214] text-[10px] font-bold flex items-center justify-center leading-none">
-                        {item.badge}
-                      </span>
-                    )}
                   </div>
                   <span className="text-[11px] tracking-tight mt-1">{item.label}</span>
                   {isActive && (

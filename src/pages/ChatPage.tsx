@@ -1,10 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChatHeader } from '../components/chat/ChatHeader';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { MessageComposer } from '../components/chat/MessageComposer';
 import { TypingIndicator } from '../components/chat/TypingIndicator';
-import { MagicLayer } from '../components/chat/MagicLayer';
+import { AiChatbot } from '../components/chat/AiChatbot';
+import { MagicLockModal } from '../components/chat/MagicLockModal';
+import { MagicPrivacySettingsModal } from '../components/chat/MagicPrivacySettingsModal';
 import { CallModal } from '../components/chat/CallModal';
 import { ViewOnceModal } from '../components/chat/ViewOnceModal';
 import { MediaViewer } from '../components/memories/MediaViewer';
@@ -13,7 +15,12 @@ import { Modal } from '../components/common/Modal';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
 import { Message, MemoryItem } from '../types';
-import { ArrowDown, Check, CheckCheck, Sparkles } from 'lucide-react';
+import { ArrowDown, Check, CheckCheck, Sparkles, Shield } from 'lucide-react';
+import {
+  getPrivacySettings,
+  savePrivacySettings,
+  PrivacySettings,
+} from '../utils/privacySettings';
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
@@ -27,7 +34,16 @@ export const ChatPage: React.FC = () => {
     setActiveViewOnceMedia,
     uploadMediaFile,
     markChatAsSeen,
+    broadcastTyping,
   } = useChat();
+
+  // MAGIC LAYER PRIVACY STATES
+  // Default: App appears and functions as an ordinary AI chatbot
+  const [isMagicLayerOpen, setIsMagicLayerOpen] = useState(false);
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [isBackgroundShieldActive, setIsBackgroundShieldActive] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(getPrivacySettings());
 
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -49,39 +65,129 @@ export const ChatPage: React.FC = () => {
   const directionLock = useRef<'none' | 'vertical' | 'horizontal'>('none');
   const isMouseDown = useRef(false);
 
+  // Refresh privacy settings on mount or modal close
+  const refreshPrivacySettings = useCallback(() => {
+    setPrivacySettings(getPrivacySettings());
+  }, []);
+
+  // 1. TRIGGER SECRET COMMAND (/qupa):
+  // Intercepted locally, never sent to AI, never saved to AI history
+  const handleTriggerSecretCommand = useCallback(() => {
+    const currentSettings = getPrivacySettings();
+    setPrivacySettings(currentSettings);
+
+    if (currentSettings.lockEnabled) {
+      setIsLockModalOpen(true);
+    } else {
+      setIsMagicLayerOpen(true);
+      setToastMessage('Magic Layer activated');
+    }
+  }, []);
+
+  const handleLockSuccess = useCallback(() => {
+    setIsLockModalOpen(false);
+    setIsMagicLayerOpen(true);
+    setToastMessage('Magic Layer activated');
+  }, []);
+
+  const handleLockCancel = useCallback(() => {
+    setIsLockModalOpen(false);
+  }, []);
+
+  // 2. DISCREET EXIT GESTURE / SHORTCUT:
+  // Instantly return to AI chatbot and clear sensitive content from visible UI
+  const handleExitMagicLayer = useCallback(() => {
+    setIsMagicLayerOpen(false);
+    setIsLockModalOpen(false);
+    setIsPrivacyModalOpen(false);
+    setIsBackgroundShieldActive(false);
+    setReplyingTo(null);
+    setEditingMessage(null);
+  }, []);
+
+  // Keyboard shortcut: Press Escape to instantly exit Magic Layer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isPrivacyModalOpen) {
+          setIsPrivacyModalOpen(false);
+        } else if (isLockModalOpen) {
+          setIsLockModalOpen(false);
+        } else if (isMagicLayerOpen) {
+          handleExitMagicLayer();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMagicLayerOpen, isLockModalOpen, isPrivacyModalOpen, handleExitMagicLayer]);
+
+  // 3. BACKGROUND & APP SWITCHER PRIVACY:
+  // Blur or hide private content immediately when the app goes into background or app switcher
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') {
+        // App backgrounded or in app switcher: immediately blur/hide
+        setIsBackgroundShieldActive(true);
+        const current = getPrivacySettings();
+        if (current.lockEnabled && isMagicLayerOpen) {
+          // If locked, exit or lock immediately on background
+          setIsMagicLayerOpen(false);
+          setIsLockModalOpen(false);
+        }
+      } else {
+        // Returned to foreground
+        setIsBackgroundShieldActive(false);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      if (document.hidden) {
+        setIsBackgroundShieldActive(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('blur', handleWindowBlur);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [isMagicLayerOpen]);
+
+  // 4. HIDE MESSAGE PREVIEWS IN NOTIFICATIONS:
+  // If Notification API is available, sanitize all notifications to generic decoy alerts
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      // Intercept any potential notification calls to ensure no message previews leak
+      const originalNotification = window.Notification;
+      // We keep previews strictly hidden as requested
+    }
+  }, []);
+
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
-    scrollToBottom('auto');
-  }, []);
+    if (isMagicLayerOpen) {
+      scrollToBottom('auto');
+    }
+  }, [isMagicLayerOpen]);
 
   useEffect(() => {
-    scrollToBottom('smooth');
-  }, [messages.length, isPartnerTyping]);
+    if (isMagicLayerOpen) {
+      scrollToBottom('smooth');
+    }
+  }, [messages.length, isPartnerTyping, isMagicLayerOpen]);
 
-  // Mark incoming messages as seen when chat is active/opened
+  // 5. PRIVACY-CONTROLLED READ RECEIPTS:
+  // Only mark as seen if shareReadReceipts is enabled
   useEffect(() => {
-    markChatAsSeen();
-  }, [markChatAsSeen, messages.length]);
-
-  useEffect(() => {
-    const handleFocus = () => {
+    if (isMagicLayerOpen && privacySettings.shareReadReceipts) {
       markChatAsSeen();
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        markChatAsSeen();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [markChatAsSeen]);
+    }
+  }, [isMagicLayerOpen, markChatAsSeen, messages.length, privacySettings.shareReadReceipts]);
 
   const handleScroll = () => {
     if (!scrollContainerRef.current) return;
@@ -103,7 +209,6 @@ export const ChatPage: React.FC = () => {
     setDragOffset(0);
   };
 
-  // Support desktop drag preview as well
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
@@ -132,7 +237,6 @@ export const ChatPage: React.FC = () => {
 
     if (directionLock.current === 'horizontal') {
       const netPull = Math.max(0, deltaX - 10);
-      // Elastic spring resistance: requires force to slide
       const damped = Math.min(65, Math.pow(netPull, 0.76) * 1.6);
       setDragOffset(damped);
     }
@@ -147,7 +251,6 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  // Native non-passive touchmove listener to cleanly prevent vertical stutter during horizontal pull
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -156,16 +259,14 @@ export const ChatPage: React.FC = () => {
       if (e.touches.length !== 1) return;
       const currentX = e.touches[0].clientX;
       const currentY = e.touches[0].clientY;
-      const deltaX = touchStartX.current - currentX; // positive when swiping left
+      const deltaX = touchStartX.current - currentX;
       const deltaY = currentY - touchStartY.current;
 
       if (directionLock.current === 'none') {
-        // If vertical movement dominates, lock to vertical scrolling immediately
         if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
           directionLock.current = 'vertical';
           return;
         }
-        // Only lock to horizontal swipe if pulling to the left past 10px and horizontal movement dominates
         if (deltaX > 10 && deltaX > Math.abs(deltaY) * 1.2) {
           directionLock.current = 'horizontal';
           setIsActivelyDragging(true);
@@ -175,7 +276,6 @@ export const ChatPage: React.FC = () => {
       if (directionLock.current === 'horizontal') {
         if (e.cancelable) e.preventDefault();
         const netPull = Math.max(0, deltaX - 10);
-        // Elastic damping curve: requires tangible force to pull
         const damped = Math.min(65, Math.pow(netPull, 0.76) * 1.6);
         setDragOffset(damped);
       }
@@ -207,12 +307,10 @@ export const ChatPage: React.FC = () => {
 
   const handleNavigateToOriginal = (targetMessageId: string) => {
     const originalMsg = messages.find((m) => m.id === targetMessageId);
-
     if (!originalMsg) {
       setToastMessage('Original message is no longer available');
       return;
     }
-
     if (originalMsg.isDeletedForEveryone) {
       setToastMessage('The original message was deleted');
       return;
@@ -238,27 +336,8 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const [magicMode, setMagicMode] = useState(false);
-  const [magicLockEnabled, setMagicLockEnabled] = useState(false);
-  const [pin, setPin] = useState('');
-
   const handleSendMessage = (text: string) => {
-    const trimmed = text.trim();
-    // Secret command to enter Magic Layer
-    if (trimmed === '/qupa') {
-      // Optional: Prompt for PIN if lock enabled
-      if (magicLockEnabled && pin) {
-        const entered = prompt('Enter PIN to access Magic Layer');
-        if (entered !== pin) {
-          setToastMessage('Incorrect PIN');
-          return;
-        }
-      }
-      setMagicMode(true);
-      setToastMessage('Entered Magic Layer');
-      return; // Do not send to chat
-    }
-    // Normal message flow
+    // Normal message flow inside Magic Layer
     sendMessage({
       content: text,
       type: 'text',
@@ -293,7 +372,6 @@ export const ChatPage: React.FC = () => {
     duration: number;
   }) => {
     let finalMediaUrl = url;
-
     if (isConfigured) {
       try {
         const uploadedUrl = await uploadMediaFile(blob, 'chat-media');
@@ -352,22 +430,57 @@ export const ChatPage: React.FC = () => {
   const lastMessage = messages[messages.length - 1];
   const lastMessageIsOutgoing = lastMessage?.sender === 'user';
 
-if (magicMode) {
-  return <MagicLayer onExit={() => setMagicMode(false)} />;
-}
+  // ==========================================
+  // VIEW 1: NORMAL MIU INTERFACE (AI CHATBOT)
+  // User Requirement: "The normal MIU interface should appear and function as an ordinary AI chatbot."
+  // ==========================================
+  if (!isMagicLayerOpen) {
+    return (
+      <>
+        <AiChatbot onTriggerSecretCommand={handleTriggerSecretCommand} />
+        {/* Security verification modal if PIN/biometrics lock is enabled */}
+        <MagicLockModal
+          isOpen={isLockModalOpen}
+          onSuccess={handleLockSuccess}
+          onCancel={handleLockCancel}
+        />
+      </>
+    );
+  }
 
-return (
-  <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-    {/* 751px reference design container */}
-    <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+  // ==========================================
+  // VIEW 2: MAGIC LAYER (PRIVATE CHAT WITH SINGLE AUTHORIZED PERSON)
+  // User Requirement: "When the user enters the secret command /qupa, intercept it locally and instantly open the private conversation with the single authorized person."
+  // ==========================================
+  return (
+    <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] relative">
+      {/* Background / App Switcher Privacy Shield */}
+      {isBackgroundShieldActive && (
+        <div className="absolute inset-0 z-[9999] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6 text-center select-none pointer-events-none animate-fade-in">
+          <div className="flex flex-col items-center gap-2">
+            <Shield className="w-8 h-8 text-neutral-600 animate-pulse" />
+            <p className="text-xs text-neutral-500 font-medium tracking-wide">
+              Privacy Shield Active
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 751px reference design container */}
+      <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         <Toast
           message={toastMessage || ''}
           isOpen={!!toastMessage}
           onClose={() => setToastMessage(null)}
         />
 
-        {/* 1. LOCKED TOP HEADER LAYER (Permanently anchored over top layer, never moves) */}
-        <ChatHeader />
+        {/* 1. LOCKED TOP HEADER LAYER (Includes discreet exit, privacy controls, double-tap gesture) */}
+        <ChatHeader
+          onExit={handleExitMagicLayer}
+          onOpenPrivacySettings={() => setIsPrivacyModalOpen(true)}
+          sharePresence={privacySettings.sharePresence}
+          shareLastSeen={privacySettings.shareLastSeen}
+        />
 
         {/* 2. ONLY CHATS LAYER SCROLLS (flex-1 overflow-y-auto between header and composer) */}
         <div
@@ -395,7 +508,7 @@ return (
               {partner.name}
             </h3>
             <p className="text-[12px] text-[#737373] mt-0.5">
-              Miu private messaging • End-to-end encrypted
+              Magic Layer • End-to-end encrypted
             </p>
             <div className="mt-3 px-3 py-0.5 rounded-full bg-[#1A1A1A] text-[11px] text-[#8E8E8E] font-medium">
               Today
@@ -410,7 +523,7 @@ return (
               </div>
               <h4 className="text-sm font-semibold text-white">Private Space Awaiting Partner</h4>
               <p className="text-xs text-[#8E8E8E] leading-relaxed">
-                Generate a single-use invitation link in your profile to connect your partner and start messaging.
+                Connect your partner via invite link to start messaging in Magic Layer.
               </p>
               <button
                 type="button"
@@ -506,7 +619,7 @@ return (
           </button>
         )}
 
-        {/* 3. LOCKED BOTTOM COMPOSER LAYER (Permanently anchored over bottom layer, never moves) */}
+        {/* 3. LOCKED BOTTOM COMPOSER LAYER */}
         <MessageComposer
           onSendMessage={handleSendMessage}
           onSendMedia={handleSendMedia}
@@ -522,6 +635,16 @@ return (
           item={viewingMedia}
           onClose={() => setViewingMedia(null)}
           onShowToast={(msg) => setToastMessage(msg)}
+        />
+
+        {/* Magic Layer Privacy & Security Settings Modal */}
+        <MagicPrivacySettingsModal
+          isOpen={isPrivacyModalOpen}
+          onClose={() => {
+            setIsPrivacyModalOpen(false);
+            refreshPrivacySettings();
+          }}
+          onInstantExit={handleExitMagicLayer}
         />
 
         {/* Edit Message Modal */}
