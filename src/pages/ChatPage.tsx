@@ -44,6 +44,32 @@ export const ChatPage: React.FC = () => {
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [isBackgroundShieldActive, setIsBackgroundShieldActive] = useState(false);
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(getPrivacySettings());
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  // Dynamically track visualViewport for mobile virtual keyboards
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const updateHeight = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      }
+    };
+
+    updateHeight();
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateHeight);
+    }
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateHeight);
+      }
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
 
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -453,7 +479,10 @@ export const ChatPage: React.FC = () => {
   // User Requirement: "When the user enters the secret command /qupa, intercept it locally and instantly open the private conversation with the single authorized person."
   // ==========================================
   return (
-    <div className="w-full h-screen h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] relative">
+    <div
+      style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
+      className="w-full max-h-[100dvh] bg-[#000000] text-white flex flex-col items-center overflow-hidden relative"
+    >
       {/* Background / App Switcher Privacy Shield */}
       {isBackgroundShieldActive && (
         <div className="absolute inset-0 z-[9999] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6 text-center select-none pointer-events-none animate-fade-in">
@@ -467,7 +496,7 @@ export const ChatPage: React.FC = () => {
       )}
 
       {/* 751px reference design container */}
-      <div className="w-full max-w-[751px] h-full flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <div className="w-full max-w-[751px] flex-1 min-h-0 flex flex-col bg-[#000000] relative border-x border-[#1A1A1A]/40 overflow-hidden shadow-2xl">
         <Toast
           message={toastMessage || ''}
           isOpen={!!toastMessage}
@@ -493,7 +522,7 @@ export const ChatPage: React.FC = () => {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 py-2.5 flex flex-col relative no-scrollbar touch-pan-y"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3.5 py-2.5 flex flex-col relative no-scrollbar touch-pan-y overscroll-contain"
         >
           {/* Top Encrypted Presence Card */}
           <div className="flex flex-col items-center justify-center my-5 text-center select-none">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, ArrowUp, Sun, Moon, Trash2, Bot, CornerDownLeft } from 'lucide-react';
+import { Sparkles, ArrowUp, Sun, Moon, Trash2, Bot } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 export interface AiChatMessage {
@@ -26,7 +26,34 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   const { isDark, setThemeMode } = useTheme();
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Dynamically track visualViewport for mobile virtual keyboards
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const updateHeight = () => {
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      }
+    };
+
+    updateHeight();
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateHeight);
+    }
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateHeight);
+      }
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, []);
 
   const [messages, setMessages] = useState<AiChatMessage[]>(() => {
     try {
@@ -56,6 +83,12 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  const handleInputFocus = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 250);
+  };
 
   // Generate intelligent decoy responses for any prompt or command
   const generateAiResponse = (userPrompt: string): string => {
@@ -141,10 +174,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     if (!trimmed) return;
 
     // SECRET COMMAND INTERCEPTION:
-    // User requirement:
-    // - "When the user enters the secret command `/qupa`, intercept it locally and instantly open the private conversation with the single authorized person."
-    // - "Secret command must never be sent to the AI or stored in chat history."
-    // - "Wrong commands behave normally like chatbot messages."
+    // Intercepted locally, never sent to AI, never saved to AI history
     if (trimmed.toLowerCase() === '/qupa') {
       setInput('');
       onTriggerSecretCommand();
@@ -163,7 +193,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
     setInput('');
     setIsTyping(true);
 
-    // Realistic typing response latency (350ms - 650ms)
+    // Realistic typing response latency (350ms - 550ms)
     setTimeout(() => {
       const responseText = generateAiResponse(trimmed);
       const assistantMsg: AiChatMessage = {
@@ -198,11 +228,15 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   };
 
   return (
-    <div className="w-full h-screen h-[100dvh] bg-[#FAF9F7] dark:bg-[#111214] text-[#171717] dark:text-[#F5F5F5] flex flex-col items-center overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      {/* Centered container */}
-      <div className="w-full max-w-[760px] h-full flex flex-col bg-[#FFFFFF] dark:bg-[#15161A] border-x border-[#EAE8E4] dark:border-[#22242A] relative shadow-lg overflow-hidden">
-        {/* Decoy AI Chatbot Header */}
-        <header className="shrink-0 w-full px-4 py-3 border-b border-[#EEEEEC] dark:border-[#26282F] bg-[#FFFFFF]/95 dark:bg-[#15161A]/95 backdrop-blur-md flex items-center justify-between z-20">
+    <div
+      style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
+      className="w-full max-h-[100dvh] bg-[#FAF9F7] dark:bg-[#111214] text-[#171717] dark:text-[#F5F5F5] flex flex-col items-center overflow-hidden"
+    >
+      {/* Centered reference design container */}
+      <div className="w-full max-w-[760px] flex-1 min-h-0 flex flex-col bg-[#FFFFFF] dark:bg-[#15161A] border-x border-[#EAE8E4] dark:border-[#22242A] relative shadow-lg overflow-hidden">
+        
+        {/* 1. PERMANENTLY VISIBLE TOP HEADER (flex-shrink: 0, safe-area-inset-top) */}
+        <header className="shrink-0 flex-shrink-0 w-full px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-[#EEEEEC] dark:border-[#26282F] bg-[#FFFFFF]/95 dark:bg-[#15161A]/95 backdrop-blur-md flex items-center justify-between z-30 select-none">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#6366F1] to-[#A855F7] text-white flex items-center justify-center shadow-xs">
               <Sparkles className="w-4.5 h-4.5 stroke-[2]" />
@@ -245,8 +279,8 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
           </div>
         </header>
 
-        {/* Messages Stream */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar">
+        {/* 2. FLEXIBLE CONVERSATION AREA (flex: 1; min-height: 0; overflow-y: auto) */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar overscroll-contain">
           {messages.map((msg) => {
             const isUser = msg.sender === 'user';
             return (
@@ -301,6 +335,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
                     type="button"
                     onClick={() => {
                       setInput(item.replace(/^[^\s]+\s/, ''));
+                      textareaRef.current?.focus();
                     }}
                     className="p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900/60 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200/70 dark:border-neutral-800 text-left text-xs text-neutral-700 dark:text-neutral-300 transition-all active:scale-[0.98] cursor-pointer"
                   >
@@ -314,13 +349,15 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
           <div ref={messagesEndRef} className="h-1" />
         </div>
 
-        {/* Input Bar */}
-        <div className="shrink-0 p-3 bg-[#FFFFFF] dark:bg-[#15161A] border-t border-[#EEEEEC] dark:border-[#26282F]">
+        {/* 3. PERMANENTLY VISIBLE BOTTOM COMPOSER (flex-shrink: 0, safe-area-inset-bottom) */}
+        <div className="shrink-0 flex-shrink-0 w-full p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] bg-[#FFFFFF] dark:bg-[#15161A] border-t border-[#EEEEEC] dark:border-[#26282F] z-30">
           <div className="flex items-end gap-2 bg-neutral-100 dark:bg-[#1E2026] border border-neutral-200 dark:border-neutral-800 rounded-2xl p-1.5 px-3 focus-within:ring-2 focus-within:ring-[#A855F7]/40 transition-all">
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={handleInputFocus}
               placeholder="Ask Miu AI anything... (or /help)"
               rows={1}
               className="flex-1 max-h-32 bg-transparent text-[14.5px] text-[#171717] dark:text-[#F5F5F5] placeholder:text-neutral-400 focus:outline-none resize-none py-1.5 leading-normal"

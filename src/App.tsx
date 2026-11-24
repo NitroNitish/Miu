@@ -38,7 +38,7 @@ const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   if (isStandalonePage) {
     return (
-      <div className="min-h-screen bg-[#F7F4EF] dark:bg-[#111214] text-[#1C1B1F] dark:text-[#F5F5F5] transition-colors duration-200">
+      <div className="h-full h-[100dvh] max-h-[100dvh] w-full overflow-hidden flex flex-col bg-[#F7F4EF] dark:bg-[#111214] text-[#1C1B1F] dark:text-[#F5F5F5] transition-colors duration-200">
         {children}
       </div>
     );

@@ -313,7 +313,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="w-full bg-[#121212] border-t border-[#262626] relative z-20 select-none">
+    <div className="shrink-0 flex-shrink-0 w-full bg-[#121212] border-t border-[#262626] relative z-20 select-none pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]">
       {/* Hidden file inputs for Camera and Photo Gallery */}
       <input
         type="file"
