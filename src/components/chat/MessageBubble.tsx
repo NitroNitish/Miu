@@ -280,9 +280,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* Timestamp revealed in right margin when swiped */}
         <div
-          className="absolute right-[-68px] top-1/2 -translate-y-1/2 w-[60px] flex items-center justify-start select-none pointer-events-none"
+          className="absolute right-[-60px] top-1/2 -translate-y-1/2 w-[56px] flex items-center justify-start select-none pointer-events-none"
           style={{
-            opacity: Math.min(1, Math.max(0, dragOffset / 28)),
+            opacity: Math.min(1, Math.max(0, dragOffset / 18)),
             transition: isDragging ? 'none' : 'opacity 200ms ease',
           }}
         >
@@ -562,9 +562,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       {/* Instagram-style revealable timestamp in right gutter */}
       <div
-        className="absolute right-[-68px] top-1/2 -translate-y-1/2 w-[60px] flex items-center justify-start select-none pointer-events-none"
+        className="absolute right-[-60px] top-1/2 -translate-y-1/2 w-[56px] flex items-center justify-start select-none pointer-events-none"
         style={{
-          opacity: Math.min(1, Math.max(0, dragOffset / 28)),
+          opacity: Math.min(1, Math.max(0, dragOffset / 18)),
           transition: isDragging ? 'none' : 'opacity 200ms ease',
         }}
       >

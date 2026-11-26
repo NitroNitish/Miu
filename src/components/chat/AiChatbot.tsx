@@ -577,6 +577,30 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
             touchStartY.current = e.touches[0].clientY;
             directionLock.current = 'none';
           }}
+          onTouchMove={(e) => {
+            if (e.touches.length !== 1) return;
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const deltaX = touchStartX.current - currentX;
+            const deltaY = currentY - touchStartY.current;
+
+            if (directionLock.current === 'none') {
+              if (Math.abs(deltaY) > 6 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+                directionLock.current = 'vertical';
+                return;
+              }
+              if (deltaX > 4 && deltaX > Math.abs(deltaY)) {
+                directionLock.current = 'horizontal';
+                setIsActivelyDragging(true);
+              }
+            }
+
+            if (directionLock.current === 'horizontal') {
+              const pull = Math.max(0, deltaX);
+              const drag = pull <= 65 ? pull : 65 + (pull - 65) * 0.22;
+              setDragOffset(drag);
+            }
+          }}
           onTouchEnd={() => {
             directionLock.current = 'none';
             setIsActivelyDragging(false);
@@ -686,9 +710,9 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
 
                     {/* Instagram-style revealable timestamp in right gutter */}
                     <div
-                      className="absolute right-[-68px] top-1/2 -translate-y-1/2 w-[60px] flex items-center justify-start select-none pointer-events-none"
+                      className="absolute right-[-60px] top-1/2 -translate-y-1/2 w-[56px] flex items-center justify-start select-none pointer-events-none"
                       style={{
-                        opacity: Math.min(1, Math.max(0, dragOffset / 28)),
+                        opacity: Math.min(1, Math.max(0, dragOffset / 18)),
                         transition: isActivelyDragging ? 'none' : 'opacity 200ms ease',
                       }}
                     >

@@ -300,6 +300,31 @@ export const ChatPage: React.FC = () => {
     directionLock.current = 'none';
   };
 
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 1) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const deltaX = touchStartX.current - currentX; // positive when swiping left
+    const deltaY = currentY - touchStartY.current;
+
+    if (directionLock.current === 'none') {
+      if (Math.abs(deltaY) > 6 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+        directionLock.current = 'vertical';
+        return;
+      }
+      if (deltaX > 4 && deltaX > Math.abs(deltaY)) {
+        directionLock.current = 'horizontal';
+        setIsActivelyDragging(true);
+      }
+    }
+
+    if (directionLock.current === 'horizontal') {
+      const pull = Math.max(0, deltaX);
+      const drag = pull <= 65 ? pull : 65 + (pull - 65) * 0.22;
+      setDragOffset(drag);
+    }
+  };
+
   const handleTouchEnd = () => {
     directionLock.current = 'none';
     setIsActivelyDragging(false);
@@ -362,8 +387,16 @@ export const ChatPage: React.FC = () => {
 
   // Native non-passive touchmove listener to prevent vertical scroll jitter during horizontal drag
   useEffect(() => {
+    if (!isMagicLayerOpen) return;
     const container = scrollContainerRef.current;
     if (!container) return;
+
+    const onNativeTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+      directionLock.current = 'none';
+    };
 
     const onNativeTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
@@ -391,11 +424,24 @@ export const ChatPage: React.FC = () => {
       }
     };
 
-    container.addEventListener('touchmove', onNativeTouchMove, { passive: false });
-    return () => {
-      container.removeEventListener('touchmove', onNativeTouchMove);
+    const onNativeTouchEnd = () => {
+      directionLock.current = 'none';
+      setIsActivelyDragging(false);
+      setDragOffset(0);
     };
-  }, []);
+
+    container.addEventListener('touchstart', onNativeTouchStart, { passive: true });
+    container.addEventListener('touchmove', onNativeTouchMove, { passive: false });
+    container.addEventListener('touchend', onNativeTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', onNativeTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', onNativeTouchStart);
+      container.removeEventListener('touchmove', onNativeTouchMove);
+      container.removeEventListener('touchend', onNativeTouchEnd);
+      container.removeEventListener('touchcancel', onNativeTouchEnd);
+    };
+  }, [isMagicLayerOpen]);
 
   const getReplyPayload = (target: Message | null) => {
     if (!target) return undefined;
@@ -654,6 +700,7 @@ export const ChatPage: React.FC = () => {
           ref={scrollContainerRef}
           onScroll={handleScroll}
           onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           onTouchCancel={handleTouchEnd}
           onMouseDown={handleMouseDown}
