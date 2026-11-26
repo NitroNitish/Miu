@@ -272,10 +272,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     return (
       <div
         className={`group relative flex flex-col ${spacingClass} ${isOutgoing ? 'items-end' : 'items-start'} w-full select-none`}
-        style={{
-          transform: `translateX(-${dragOffset}px)`,
-          transition: isDragging ? 'none' : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
-        }}
       >
         <div className="px-4 py-2.5 rounded-2xl border border-[#2E2E2E] bg-[#141414] text-xs italic text-[#737373] flex items-center gap-2 select-none">
           <Ban className="w-4 h-4 opacity-60" />
@@ -284,13 +280,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
         {/* Timestamp revealed in right margin when swiped */}
         <div
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-3.5 flex items-center select-none pointer-events-none"
+          className="absolute right-[-68px] top-1/2 -translate-y-1/2 w-[60px] flex items-center justify-start select-none pointer-events-none"
           style={{
-            opacity: Math.min(1, Math.max(0, (dragOffset - 8) / 28)),
+            opacity: Math.min(1, Math.max(0, dragOffset / 28)),
             transition: isDragging ? 'none' : 'opacity 200ms ease',
           }}
         >
-          <span className="text-[11px] sm:text-[12px] font-normal text-[#737373] whitespace-nowrap tabular-nums">
+          <span className="text-[11px] font-medium text-[#8E8E8E] whitespace-nowrap tabular-nums tracking-tight">
             {message.timestamp}
           </span>
         </div>
@@ -308,8 +304,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           : ''
       }`}
       style={{
-        transform: `translateX(${swipeOffset - dragOffset}px)`,
-        transition: isSwiping || isDragging ? 'none' : 'transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1)',
+        transform: `translateX(${swipeOffset}px)`,
+        transition: isSwiping ? 'none' : 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)',
       }}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -566,13 +562,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
       {/* Instagram-style revealable timestamp in right gutter */}
       <div
-        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-3 flex items-center select-none pointer-events-none"
+        className="absolute right-[-68px] top-1/2 -translate-y-1/2 w-[60px] flex items-center justify-start select-none pointer-events-none"
         style={{
-          opacity: Math.min(1, Math.max(0, (dragOffset - 8) / 28)),
+          opacity: Math.min(1, Math.max(0, dragOffset / 28)),
           transition: isDragging ? 'none' : 'opacity 200ms ease',
         }}
       >
-        <span className="text-[10.5px] sm:text-[11px] font-normal text-[#737373] whitespace-nowrap tabular-nums">
+        <span className="text-[11px] font-medium text-[#8E8E8E] whitespace-nowrap tabular-nums tracking-tight">
           {message.timestamp}
         </span>
       </div>

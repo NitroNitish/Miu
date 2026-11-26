@@ -94,8 +94,10 @@ export const ChatPage: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
-  const directionLock = useRef<'none' | 'vertical' | 'horizontal'>('none');
+  const mouseStartX = useRef(0);
+  const mouseStartY = useRef(0);
   const isMouseDown = useRef(false);
+  const directionLock = useRef<'none' | 'vertical' | 'horizontal'>('none');
 
   // Refresh privacy settings on mount or modal close
   const refreshPrivacySettings = useCallback(() => {
@@ -307,45 +309,58 @@ export const ChatPage: React.FC = () => {
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button, input, textarea, a')) return;
+    if (target.closest('button, input, textarea, a, [data-interactive="true"]')) return;
     isMouseDown.current = true;
-    touchStartX.current = e.clientX;
-    touchStartY.current = e.clientY;
+    mouseStartX.current = e.clientX;
+    mouseStartY.current = e.clientY;
     directionLock.current = 'none';
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isMouseDown.current) return;
-    const deltaX = touchStartX.current - e.clientX;
-    const deltaY = e.clientY - touchStartY.current;
+  // Window-level mouse listener for smooth desktop drag to reveal timestamps
+  useEffect(() => {
+    const onWindowMouseMove = (e: MouseEvent) => {
+      if (!isMouseDown.current) return;
+      const deltaX = mouseStartX.current - e.clientX;
+      const deltaY = e.clientY - mouseStartY.current;
 
-    if (directionLock.current === 'none') {
-      if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
-        directionLock.current = 'vertical';
-        return;
+      if (directionLock.current === 'none') {
+        if (Math.abs(deltaY) > 6 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+          directionLock.current = 'vertical';
+          return;
+        }
+        if (deltaX > 4 && deltaX > Math.abs(deltaY)) {
+          directionLock.current = 'horizontal';
+          setIsActivelyDragging(true);
+        }
       }
-      if (deltaX > 10 && deltaX > Math.abs(deltaY) * 1.2) {
-        directionLock.current = 'horizontal';
-        setIsActivelyDragging(true);
+
+      if (directionLock.current === 'horizontal') {
+        e.preventDefault();
+        const pull = Math.max(0, deltaX);
+        const drag = pull <= 65 ? pull : 65 + (pull - 65) * 0.22;
+        setDragOffset(drag);
       }
-    }
+    };
 
-    if (directionLock.current === 'horizontal') {
-      const netPull = Math.max(0, deltaX - 10);
-      const damped = Math.min(65, Math.pow(netPull, 0.76) * 1.6);
-      setDragOffset(damped);
-    }
-  };
+    const onWindowMouseUp = () => {
+      if (isMouseDown.current) {
+        isMouseDown.current = false;
+        directionLock.current = 'none';
+        setIsActivelyDragging(false);
+        setDragOffset(0);
+      }
+    };
 
-  const handleMouseUp = () => {
-    if (isMouseDown.current) {
-      isMouseDown.current = false;
-      directionLock.current = 'none';
-      setIsActivelyDragging(false);
-      setDragOffset(0);
-    }
-  };
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
 
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+  }, []);
+
+  // Native non-passive touchmove listener to prevent vertical scroll jitter during horizontal drag
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -358,11 +373,11 @@ export const ChatPage: React.FC = () => {
       const deltaY = currentY - touchStartY.current;
 
       if (directionLock.current === 'none') {
-        if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+        if (Math.abs(deltaY) > 6 && Math.abs(deltaY) >= Math.abs(deltaX)) {
           directionLock.current = 'vertical';
           return;
         }
-        if (deltaX > 10 && deltaX > Math.abs(deltaY) * 1.2) {
+        if (deltaX > 4 && deltaX > Math.abs(deltaY)) {
           directionLock.current = 'horizontal';
           setIsActivelyDragging(true);
         }
@@ -370,9 +385,9 @@ export const ChatPage: React.FC = () => {
 
       if (directionLock.current === 'horizontal') {
         if (e.cancelable) e.preventDefault();
-        const netPull = Math.max(0, deltaX - 10);
-        const damped = Math.min(65, Math.pow(netPull, 0.76) * 1.6);
-        setDragOffset(damped);
+        const pull = Math.max(0, deltaX);
+        const drag = pull <= 65 ? pull : 65 + (pull - 65) * 0.22;
+        setDragOffset(drag);
       }
     };
 
@@ -433,9 +448,9 @@ export const ChatPage: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     const trimmed = text.trim();
 
-    // /miu AI Command support in hidden Magic Layer chat
-    if (trimmed.startsWith('/miu')) {
-      const query = trimmed.replace(/^\/miu\s*/, '').trim();
+    // /miu AI Command support in hidden Magic Layer chat (case-insensitive)
+    if (trimmed.toLowerCase().startsWith('/miu')) {
+      const query = trimmed.replace(/^\/miu\s*/i, '').trim();
 
       // If user typed /miu without a query, show instructional helper
       if (!query) {
@@ -642,9 +657,6 @@ export const ChatPage: React.FC = () => {
           onTouchEnd={handleTouchEnd}
           onTouchCancel={handleTouchEnd}
           onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3.5 py-2.5 flex flex-col relative no-scrollbar touch-pan-y overscroll-contain"
         >
           {/* Subtle loading indicator when fetching older messages */}
@@ -719,7 +731,15 @@ export const ChatPage: React.FC = () => {
           )}
 
           {/* Render All Messages with grouping, swipe timestamp reveal, and Instagram gradient */}
-          <div className="flex-1 flex flex-col justify-end w-full">
+          <div
+            className="flex-1 flex flex-col justify-end w-full relative"
+            style={{
+              transform: `translateX(-${dragOffset}px)`,
+              transition: isActivelyDragging
+                ? 'none'
+                : 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)',
+            }}
+          >
             {messages.map((msg, idx) => (
               <MessageBubble
                 key={msg.id}
@@ -744,12 +764,6 @@ export const ChatPage: React.FC = () => {
             {lastMessageIsOutgoing && lastMessage?.status === 'seen' && (
               <div
                 className="flex justify-end items-center gap-1 pr-1.5 mt-1.5 text-[12px] text-[#737373] font-medium select-none"
-                style={{
-                  transform: `translateX(-${dragOffset}px)`,
-                  transition: isActivelyDragging
-                    ? 'none'
-                    : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
-                }}
               >
                 <span>Seen</span>
                 <CheckCheck className="w-3.5 h-3.5 text-[#35B779]" />
@@ -758,12 +772,6 @@ export const ChatPage: React.FC = () => {
             {lastMessageIsOutgoing && lastMessage?.status === 'delivered' && (
               <div
                 className="flex justify-end items-center gap-1 pr-1.5 mt-1.5 text-[12px] text-[#737373] font-medium select-none"
-                style={{
-                  transform: `translateX(-${dragOffset}px)`,
-                  transition: isActivelyDragging
-                    ? 'none'
-                    : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
-                }}
               >
                 <span>Delivered</span>
                 <CheckCheck className="w-3.5 h-3.5 text-[#737373]" />
@@ -772,12 +780,6 @@ export const ChatPage: React.FC = () => {
             {lastMessageIsOutgoing && (lastMessage?.status === 'sent' || lastMessage?.status === 'sending') && (
               <div
                 className="flex justify-end items-center gap-1 pr-1.5 mt-1.5 text-[12px] text-[#737373] font-medium select-none"
-                style={{
-                  transform: `translateX(-${dragOffset}px)`,
-                  transition: isActivelyDragging
-                    ? 'none'
-                    : 'transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1)',
-                }}
               >
                 <span>{lastMessage?.status === 'sending' ? 'Sending' : 'Sent'}</span>
                 <Check className="w-3.5 h-3.5 text-[#737373]" />

@@ -596,7 +596,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             {
               conversation_id: connection.conversation_id,
               sender_id: authUser.id,
-              message_type: interactionType ? 'interaction' : type,
+              message_type: 'text', // Safe fallback so Postgres check constraint is never violated
               content,
               media_path: mediaUrl,
               duration,

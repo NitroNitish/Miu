@@ -136,9 +136,99 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
   const [selectedModel, setSelectedModel] = useState('Miu 2.5');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isActivelyDragging, setIsActivelyDragging] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const mouseStartX = useRef(0);
+  const mouseStartY = useRef(0);
+  const isMouseDown = useRef(false);
+  const directionLock = useRef<'none' | 'vertical' | 'horizontal'>('none');
+
+  // Swipe-to-reveal timestamps desktop mouse listener
+  useEffect(() => {
+    const onWindowMouseMove = (e: MouseEvent) => {
+      if (!isMouseDown.current) return;
+      const deltaX = mouseStartX.current - e.clientX;
+      const deltaY = e.clientY - mouseStartY.current;
+
+      if (directionLock.current === 'none') {
+        if (Math.abs(deltaY) > 6 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+          directionLock.current = 'vertical';
+          return;
+        }
+        if (deltaX > 4 && deltaX > Math.abs(deltaY)) {
+          directionLock.current = 'horizontal';
+          setIsActivelyDragging(true);
+        }
+      }
+
+      if (directionLock.current === 'horizontal') {
+        e.preventDefault();
+        const pull = Math.max(0, deltaX);
+        const drag = pull <= 65 ? pull : 65 + (pull - 65) * 0.22;
+        setDragOffset(drag);
+      }
+    };
+
+    const onWindowMouseUp = () => {
+      if (isMouseDown.current) {
+        isMouseDown.current = false;
+        directionLock.current = 'none';
+        setIsActivelyDragging(false);
+        setDragOffset(0);
+      }
+    };
+
+    window.addEventListener('mousemove', onWindowMouseMove);
+    window.addEventListener('mouseup', onWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onWindowMouseMove);
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+  }, []);
+
+  // Swipe-to-reveal timestamps mobile touch listener
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const onNativeTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const deltaX = touchStartX.current - currentX;
+      const deltaY = currentY - touchStartY.current;
+
+      if (directionLock.current === 'none') {
+        if (Math.abs(deltaY) > 6 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+          directionLock.current = 'vertical';
+          return;
+        }
+        if (deltaX > 4 && deltaX > Math.abs(deltaY)) {
+          directionLock.current = 'horizontal';
+          setIsActivelyDragging(true);
+        }
+      }
+
+      if (directionLock.current === 'horizontal') {
+        if (e.cancelable) e.preventDefault();
+        const pull = Math.max(0, deltaX);
+        const drag = pull <= 65 ? pull : 65 + (pull - 65) * 0.22;
+        setDragOffset(drag);
+      }
+    };
+
+    container.addEventListener('touchmove', onNativeTouchMove, { passive: false });
+    return () => {
+      container.removeEventListener('touchmove', onNativeTouchMove);
+    };
+  }, []);
 
   // Dynamic visualViewport tracker for mobile virtual keyboard
   useEffect(() => {
@@ -346,8 +436,15 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
 
     let responseText = '';
     try {
-      // Local utility commands handled instantly
-      if (trimmed.startsWith('/')) {
+      if (trimmed.toLowerCase().startsWith('/miu')) {
+        const query = trimmed.replace(/^\/miu\s*/i, '').trim();
+        if (!query) {
+          responseText = "Hello! I am miu. Ask me anything directly, or type `/miu <your question>`.";
+        } else {
+          // Ask Gemini with the cleaned query
+          responseText = await askGemini(query, nextMessages);
+        }
+      } else if (trimmed.startsWith('/')) {
         responseText = generateAiResponse(trimmed);
       } else {
         // Live Gemini API completion with multi-turn conversation context
@@ -472,7 +569,35 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
         {/* ========================================================= */}
         {/* MAIN CONVERSATION / EXPLORE BODY (flex: 1, min-h: 0, scroll) */}
         {/* ========================================================= */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-1 space-y-4 no-scrollbar overscroll-contain flex flex-col justify-between">
+        <div
+          ref={scrollContainerRef}
+          onTouchStart={(e) => {
+            if (e.touches.length !== 1) return;
+            touchStartX.current = e.touches[0].clientX;
+            touchStartY.current = e.touches[0].clientY;
+            directionLock.current = 'none';
+          }}
+          onTouchEnd={() => {
+            directionLock.current = 'none';
+            setIsActivelyDragging(false);
+            setDragOffset(0);
+          }}
+          onTouchCancel={() => {
+            directionLock.current = 'none';
+            setIsActivelyDragging(false);
+            setDragOffset(0);
+          }}
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            const target = e.target as HTMLElement;
+            if (target.closest('button, input, textarea, a')) return;
+            isMouseDown.current = true;
+            mouseStartX.current = e.clientX;
+            mouseStartY.current = e.clientY;
+            directionLock.current = 'none';
+          }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-5 py-1 space-y-4 no-scrollbar overscroll-contain flex flex-col justify-between"
+        >
           {messages.length === 0 ? (
             <div className="flex-1 flex flex-col justify-between py-2 select-none animate-fade-in">
               
@@ -528,13 +653,19 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
             </div>
           ) : (
             /* Active message stream */
-            <div className="space-y-4 py-2 flex-1">
+            <div
+              className="space-y-4 py-2 flex-1 relative"
+              style={{
+                transform: `translateX(-${dragOffset}px)`,
+                transition: isActivelyDragging ? 'none' : 'transform 260ms cubic-bezier(0.25, 1, 0.5, 1)',
+              }}
+            >
               {messages.map((msg) => {
                 const isUser = msg.sender === 'user';
                 return (
                   <div
                     key={msg.id}
-                    className={`flex gap-3 max-w-[85%] ${
+                    className={`group relative flex gap-3 max-w-[85%] ${
                       isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
                     }`}
                   >
@@ -551,6 +682,19 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ onTriggerSecretCommand }) 
                       }`}
                     >
                       {msg.content}
+                    </div>
+
+                    {/* Instagram-style revealable timestamp in right gutter */}
+                    <div
+                      className="absolute right-[-68px] top-1/2 -translate-y-1/2 w-[60px] flex items-center justify-start select-none pointer-events-none"
+                      style={{
+                        opacity: Math.min(1, Math.max(0, dragOffset / 28)),
+                        transition: isActivelyDragging ? 'none' : 'opacity 200ms ease',
+                      }}
+                    >
+                      <span className="text-[11px] font-medium text-[#8E8E8E] whitespace-nowrap tabular-nums tracking-tight">
+                        {msg.timestamp}
+                      </span>
                     </div>
                   </div>
                 );
